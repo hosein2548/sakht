@@ -11,7 +11,7 @@ export interface Resident {
   phone: string;
   datestart: string;
   count: string;
-  naghsh: 'malek' | 'saken';
+  naghsh: 'مالک' | 'ساکن' | string;
 }
 
 export interface AddPersonParams {
@@ -108,9 +108,7 @@ function parsePeopleResponse(raw: string): Resident[] {
       phone: String(item.phone ?? ""),
       datestart: String(item.datestart ?? ""),
       count: String(item.count ?? "0"),
-      naghsh: (item.naghsh === "malek" || item.naghsh === "saken") 
-        ? item.naghsh 
-        : 'saken',
+      naghsh: item.naghsh === "malek" ? "مالک" : "ساکن",
     }));
   } catch (error) {
     console.error("Cannot parse people response:", error);
@@ -486,4 +484,57 @@ export const unitPeopleApi = {
       };
     }
   },
+  // Backward-compatible facade for the unit people page.
+  // The feature API above uses explicit, strongly-typed operation names;
+  // these aliases keep older page code working while it is being migrated.
+  async getAll(unitId: string): Promise<Resident[]> {
+    return this.getByUnit(unitId);
+  },
+
+  async add(
+    unitId: string,
+    phone: string,
+    date: string,
+    role: 'malek' | 'saken',
+    count: string
+  ): Promise<ApiResponse> {
+    return this.addPerson({
+      unitId,
+      phone,
+      date,
+      count,
+      naghsh: role,
+    });
+  },
+
+  async edit(
+    _unitId: string,
+    person: Resident,
+    data: {
+      phone: string;
+      date: string;
+      count: string;
+      state: string;
+    }
+  ): Promise<ApiResponse> {
+    switch (data.state) {
+      case 'edit_saken_phone':
+        return this.editTenantPhone({ idnaghsh: person.idnaghsh, phone: data.phone });
+      case 'edit_saken_date':
+        return this.editTenantDate({ idnaghsh: person.idnaghsh, date: data.date });
+      case 'edit_saken_count':
+        return this.editTenantCount({ idnaghsh: person.idnaghsh, count: data.count });
+      case 'editmalek':
+        return this.editOwnerPhone({ idnaghsh: person.idnaghsh, phone: data.phone });
+      case 'editmalek_date':
+        return this.editOwnerDate({ idnaghsh: person.idnaghsh, date: data.date });
+      default:
+        return { success: false, message: 'نوع ویرایش مشخص نیست.' };
+    }
+  },
+
+  async remove(person: Resident): Promise<ApiResponse> {
+    return this.deletePerson(person.idnaghsh, getTodayPersian());
+  },
+
 };

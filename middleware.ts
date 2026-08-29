@@ -1,10 +1,11 @@
+// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "sakhteman-session";
 const SESSION_MAX_AGE = 60 * 60 * 24;
 
-async function isValidSession(token: string | undefined) {
+async function isValidSession(token: string | undefined): Promise<boolean> {
   if (!token) return false;
 
   const secret = process.env.AUTH_SESSION_SECRET;
@@ -29,12 +30,7 @@ async function isValidSession(token: string | undefined) {
     ["sign"]
   );
 
-  const expectedBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(data)
-  );
-
+  const expectedBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
   const expected = btoa(String.fromCharCode(...new Uint8Array(expectedBuffer)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -46,18 +42,21 @@ async function isValidSession(token: string | undefined) {
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const publicPaths = ["/login", "/login/otp"];
-  const isPublicPath = publicPaths.some(
-    (publicPath) => path === publicPath || path.startsWith(`${publicPath}/`)
-  );
+  const isPublicPath = publicPaths.some((p) => path === p || path.startsWith(`${p}/`));
 
-  const hasValidSession = await isValidSession(
-    request.cookies.get(SESSION_COOKIE)?.value
-  );
+  // مسیرهای API و فایل‌های استاتیک رو نادیده بگیر
+  if (path.startsWith("/api") || path.startsWith("/_next") || path.includes(".")) {
+    return NextResponse.next();
+  }
 
+  const hasValidSession = await isValidSession(request.cookies.get(SESSION_COOKIE)?.value);
+
+  // اگر کاربر لاگین کرده و در صفحه عمومی هست → برو به داشبورد
   if (isPublicPath && hasValidSession) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // اگر کاربر لاگین نکرده و در صفحه خصوصی هست → برو به لاگین
   if (!isPublicPath && !hasValidSession) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", path);
@@ -69,6 +68,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico|fonts|images).*)",
   ],
 };

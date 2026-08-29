@@ -166,7 +166,7 @@ const selectedUnit =
           //setIds(result.idv ? "" : "");
 
           setNamevahed(
-            result.namev
+            result.namevahed
           );
 
           setMetter(
@@ -198,7 +198,7 @@ const selectedUnit =
           );
 
           setDatefrom(
-            result.date
+            result.dateFrom
           );
 
           /*

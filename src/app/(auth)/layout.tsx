@@ -1,20 +1,14 @@
-// app/(auth)/layout.tsx
-
+// src/app/(auth)/layout.tsx
 "use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/src/features/auth/store/auth.store";
+import { useAuthStore } from "@/src/core/store/auth.store";
 
-export default function AuthLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
 
-  // اگر قبلاً وارد شده، به داشبورد برو
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
       router.replace("/dashboard");

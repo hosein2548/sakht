@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+
+
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/src/features/auth/store/auth.store";
+
+import { useAuthStore } from "@/src/core/store/auth.store";
+import { useAppStore } from "@/src/core/store/app.store";
+import { AuthService } from "@/src/core/auth/auth.service";
 
 import {
   notificationApi,
@@ -40,7 +46,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-import { useAppStore } from "@/src/core/store/app.store";
+
 
 import { authStorage } from "@/src/core/storage/auth.storage";
 
@@ -61,6 +67,12 @@ import {
 } from "@/src/features/dashboard/store/dashboard.store";
 
 export default function DashboardPage() {
+  
+  const [isInitializing, setIsInitializing] = useState(true);
+
+ 
+  const { user, setUser } = useAppStore();
+
   const router = useRouter();
 
   // ============================================
@@ -94,7 +106,7 @@ export default function DashboardPage() {
   // App Store (User)
   // ============================================
 
-  const user = useAppStore((state) => state.user);
+  
 
   // ============================================
   // Building Store
@@ -256,6 +268,49 @@ export default function DashboardPage() {
     setAnnouncementsError,
   ]);
 
+   useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // اگر در Store کاربر وجود داره، ازش استفاده کن
+        if (isAuthenticated && authUser) {
+          setUser(authUser);
+          setIsInitializing(false);
+          return;
+        }
+
+        // اگر در Store نبود، از localStorage یا Session بخوان
+        const authService = AuthService.getInstance();
+        const user = await authService.checkAuth();
+
+        if (user) {
+          setIsInitializing(false);
+          return;
+        }
+
+        // اگر هیچکدام نبود، به لاگین برو
+        router.replace("/login");
+      } catch (error) {
+        console.error("[Dashboard] Auth init error:", error);
+        router.replace("/login");
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initAuth();
+  }, [isAuthenticated, authUser, router, setUser]);
+
+  // ============================================
+  // ✅ ریدایرکت در صورت عدم احراز هویت
+  // ============================================
+
+  useEffect(() => {
+    if (!isInitializing && !authLoading) {
+      if (!isAuthenticated || !authUser || !user) {
+        router.replace("/login");
+      }
+    }
+  }, [isInitializing, authLoading, isAuthenticated, authUser, user, router]);
   // ============================================
   // ✅ Loading State
   // ============================================

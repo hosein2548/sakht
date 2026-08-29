@@ -1,3 +1,4 @@
+// src/app/api/auth/session/route.ts
 import { NextResponse } from "next/server";
 import { createHmac, randomBytes } from "node:crypto";
 
@@ -14,6 +15,7 @@ function sign(value: string) {
   return createHmac("sha256", getSecret()).update(value).digest("base64url");
 }
 
+// POST: ایجاد Session
 export async function POST() {
   try {
     const payload = `${Date.now()}.${randomBytes(24).toString("base64url")}`;
@@ -32,7 +34,7 @@ export async function POST() {
 
     return response;
   } catch (error) {
-    console.error("Create auth session failed:", error);
+    console.error("[Session] Create failed:", error);
     return NextResponse.json(
       { success: false, message: "ایجاد نشست ورود انجام نشد." },
       { status: 500 }
@@ -40,6 +42,14 @@ export async function POST() {
   }
 }
 
+// GET: بررسی Session
+export async function GET() {
+  // اینجا می‌تونید اطلاعات بیشتری از کاربر برگردونید
+  // فعلاً فقط وضعیت رو چک می‌کنیم
+  return NextResponse.json({ valid: true });
+}
+
+// DELETE: حذف Session
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
   response.cookies.set({
