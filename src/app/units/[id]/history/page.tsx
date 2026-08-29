@@ -1,67 +1,25 @@
+// src/app/units/[id]/history/page.tsx
 "use client";
 
-import {
-  useEffect,
-  useState,
-  useCallback,
-} from "react";
-
-import {
-  useRouter,
-  useSearchParams,
-  useParams,
-} from "next/navigation";
-
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
-
 import {
   ArrowRight,
   Calendar,
   Users,
   Clock,
-  AlertCircle,
   Trash2,
-  X,
   RefreshCw,
 } from "lucide-react";
 
-import {
-  useUnitHistoryStore,
-} from "@/src/features/units/store/unit-history.store";
+import { unitHistoryApi } from "@/src/features/units/api/unit-history.api";
+import { useBuildingStore } from "@/src/features/building/store/building.store";
 
-import {
-  unitHistoryApi,
-} from "@/src/features/units/api/unit-history.api";
-
-import {
-  useAppStore,
-} from "@/src/core/store/app.store";
-
-import {
-  useBuildingStore,
-} from "@/src/features/building/store/building.store";
-
-import {
-  Button,
-} from "@/components/ui/button";
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-
-import {
-  Input,
-} from "@/components/ui/input";
-
-import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert";
-
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -70,22 +28,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-
-import {
-  Label,
-} from "@/components/ui/label";
-
-import {
-  Badge,
-} from "@/components/ui/badge";
-
-import {
-  Skeleton,
-} from "@/components/ui/skeleton";
-
-import {
-  AlertCircle as AlertIcon,
-} from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertCircle } from "lucide-react";
 
 // ============================================
 // Types
@@ -97,39 +43,34 @@ interface ResidentHistory {
   startDate: string;
   endDate: string;
   count: string;
-  status: 'active' | 'ended' | 'pending';
+  status: "active" | "ended" | "pending";
 }
 
 // ============================================
-// Component
+// Component با Suspense
 // ============================================
 
-export default function UnitHistoryPage() {
+function HistoryContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  
-  const unitId = params?.id as string;
-  const userId = searchParams?.get('userId') || "";
 
-  // Store
-  const user = useAppStore((state) => state.user);
+  const unitId = params?.id as string;
+  const userId = searchParams?.get("userId") || "";
+
   const selectedBuilding = useBuildingStore((state) => state.selectedBuilding);
   const selectedUnit = useBuildingStore((state) => state.selectedUnit);
 
-  // State
   const [history, setHistory] = useState<ResidentHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Delete state
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  // دریافت تاریخ امروز به شمسی
   const getTodayPersian = useCallback(() => {
     const now = new Date();
     const year = now.getFullYear() - 621;
@@ -138,23 +79,17 @@ export default function UnitHistoryPage() {
     return `${year}/${month}/${day}`;
   }, []);
 
-  // ============================================
-  // Load History
-  // ============================================
-
   const loadHistory = useCallback(async () => {
     console.log("🔍 Loading history for:", { unitId, userId });
 
     if (!unitId) {
-      console.warn("⚠️ No unit ID provided");
       setError("شناسه واحد موجود نیست.");
       setIsLoading(false);
       return;
     }
 
     if (!userId) {
-      console.warn("⚠️ No user ID provided");
-      setError("شناسه کاربر موجود نیست.");
+      setError("شناسه کاربر مشخص نیست.");
       setIsLoading(false);
       return;
     }
@@ -170,11 +105,6 @@ export default function UnitHistoryPage() {
 
       console.log("✅ History result:", result);
       setHistory(result);
-
-      if (result.length === 0) {
-        // این خطا نیست، فقط هیچ سابقه‌ای وجود نداره
-        setError(null);
-      }
     } catch (err) {
       console.error("❌ Load history error:", err);
       setError("دریافت سوابق با خطا مواجه شد.");
@@ -183,14 +113,10 @@ export default function UnitHistoryPage() {
     }
   }, [unitId, userId]);
 
-  // بارگذاری اولیه
   useEffect(() => {
-    console.log("🔄 useEffect triggered with:", { unitId, userId });
-    
     if (unitId && userId) {
       void loadHistory();
     } else {
-      console.warn("⚠️ Missing unitId or userId");
       setIsLoading(false);
       if (!userId) {
         setError("شناسه کاربر مشخص نیست. لطفاً از صفحه واحد وارد شوید.");
@@ -198,14 +124,9 @@ export default function UnitHistoryPage() {
     }
   }, [unitId, userId, loadHistory]);
 
-  // ============================================
-  // End History
-  // ============================================
-
   const handleEndHistory = async () => {
     if (!selectedHistoryId) return;
 
-    // اعتبارسنجی تاریخ
     if (!endDate || endDate.length !== 10) {
       setDeleteError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/15)");
       return;
@@ -221,10 +142,7 @@ export default function UnitHistoryPage() {
       });
 
       if (result.success) {
-        // حذف از لیست
-        setHistory((prev) => 
-          prev.filter((item) => item.idnaghsh !== selectedHistoryId)
-        );
+        setHistory((prev) => prev.filter((item) => item.idnaghsh !== selectedHistoryId));
         setIsDialogOpen(false);
         setSelectedHistoryId(null);
         setEndDate("");
@@ -246,25 +164,19 @@ export default function UnitHistoryPage() {
     setIsDialogOpen(true);
   };
 
-  // ============================================
-  // Render Helpers
-  // ============================================
-
   const formatDate = (date: string) => {
     if (!date || date === "1450/01/01") return "تا کنون";
     return date;
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === 'active') {
-      return <Badge className="bg-success/100 hover:bg-success/90">فعال</Badge>;
+    if (status === "active") {
+      return (
+        <Badge className="bg-success/100 hover:bg-success/90 text-white">فعال</Badge>
+      );
     }
     return <Badge variant="secondary">پایان یافته</Badge>;
   };
-
-  // ============================================
-  // Render
-  // ============================================
 
   return (
     <div dir="rtl" className="space-y-5 px-4 py-5">
@@ -278,20 +190,13 @@ export default function UnitHistoryPage() {
         </Link>
 
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold">
-            سوابق سکونت
-          </h1>
+          <h1 className="text-xl font-bold">سوابق سکونت</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {selectedUnit?.namev || selectedBuilding?.names || "واحد"}
           </p>
-          {userId && (
-            <p className="text-xs text-muted-foreground">
-              شناسه کاربر: {userId}
-            </p>
-          )}
+          {userId && <p className="text-xs text-muted-foreground">شناسه کاربر: {userId}</p>}
         </div>
 
-        {/* دکمه رفرش */}
         <Button
           variant="outline"
           size="icon"
@@ -299,20 +204,14 @@ export default function UnitHistoryPage() {
           disabled={isLoading}
           title="بارگذاری مجدد"
         >
-          <RefreshCw className={cn(
-            "h-4 w-4",
-            isLoading && "animate-spin"
-          )} />
+          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
         </Button>
       </div>
-
-      {/* Debug Info */}
-     
 
       {/* Error */}
       {error && (
         <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-          <AlertIcon className="h-4 w-4" />
+          <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
           <Button
             variant="ghost"
@@ -341,9 +240,7 @@ export default function UnitHistoryPage() {
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
               <Users className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold">
-              سوابقی یافت نشد
-            </h3>
+            <h3 className="text-lg font-semibold">سوابقی یافت نشد</h3>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
               این شخص تاکنون سابقه سکونتی در این واحد ندارد.
             </p>
@@ -366,41 +263,29 @@ export default function UnitHistoryPage() {
             <Card key={item.idnaghsh} className="overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
-                  {/* Info */}
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">
-                        سکونت
-                      </span>
+                      <span className="font-semibold">دوره سکونت</span>
                       {getStatusBadge(item.status)}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="h-4 w-4" />
-                        <span>
-                          از {formatDate(item.startDate)}
-                        </span>
+                        <span>از {formatDate(item.startDate)}</span>
                       </div>
-
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4" />
-                        <span>
-                          تا {formatDate(item.endDate)}
-                        </span>
+                        <span>تا {formatDate(item.endDate)}</span>
                       </div>
-
                       <div className="flex items-center gap-1.5">
                         <Users className="h-4 w-4" />
-                        <span>
-                          {item.count} نفر
-                        </span>
+                        <span>{item.count} نفر</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  {item.status === 'active' && (
+                  {item.status === "active" && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -447,9 +332,7 @@ export default function UnitHistoryPage() {
               <p className="text-xs text-muted-foreground">
                 فرمت: سال/ماه/روز (مثال: 1404/01/15)
               </p>
-              {deleteError && (
-                <p className="text-sm text-destructive">{deleteError}</p>
-              )}
+              {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
             </div>
           </div>
 
@@ -488,9 +371,24 @@ export default function UnitHistoryPage() {
 }
 
 // ============================================
-// Utility
+// صفحه اصلی با Suspense
 // ============================================
 
 function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(" ");
+}
+
+export default function UnitHistoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[70vh] items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="mr-4 text-sm text-muted-foreground">در حال بارگذاری...</p>
+        </div>
+      }
+    >
+      <HistoryContent />
+    </Suspense>
+  );
 }

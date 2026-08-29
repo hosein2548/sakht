@@ -1,3 +1,4 @@
+// src/app/units/[id]/page.tsx
 "use client";
 
 import {
@@ -56,6 +57,10 @@ import {
   getTodayPersian,
   isValidPersianDate,
 } from "@/src/features/units/api/unit-people.api";
+
+import {
+  unitHistoryApi,
+} from "@/src/features/units/api/unit-history.api";
 
 import {
   Button,
@@ -136,6 +141,8 @@ interface Resident {
   datestart: string;
   count: string;
   naghsh: 'malek' | 'saken';
+  status?: 'active' | 'ended';
+  endDate?: string;
 }
 
 // ============================================
@@ -143,9 +150,9 @@ interface Resident {
 // ============================================
 
 type EditTenantDialogType = 
-  | 'phone'      // ویرایش شماره موبایل
-  | 'date'       // ویرایش تاریخ شروع سکونت
-  | 'count'      // ویرایش تعداد نفرات
+  | 'phone'
+  | 'date'
+  | 'count'
   | null;
 
 interface EditTenantData {
@@ -181,6 +188,11 @@ export default function UnitDetailPage() {
   const [isLoadingPeople, setIsLoadingPeople] = useState(true);
   const [peopleError, setPeopleError] = useState<string | null>(null);
 
+  // State - History
+  const [ownerHistory, setOwnerHistory] = useState<Resident[]>([]);
+  const [tenantHistory, setTenantHistory] = useState<Resident[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   // State - Edit Unit
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<UnitDetail>>({});
@@ -204,7 +216,7 @@ export default function UnitDetailPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  // State - Edit Tenant (ساکن) - دکمه‌های مجزا
+  // State - Edit Tenant (ساکن)
   const [editTenantDialog, setEditTenantDialog] = useState<EditTenantData>({
     type: null,
     tenant: null,
@@ -216,20 +228,21 @@ export default function UnitDetailPage() {
   const [editTenantError, setEditTenantError] = useState<string | null>(null);
   const [editTenantSuccess, setEditTenantSuccess] = useState(false);
 
+  // State - Edit Owner (مالک)
   const [editOwnerDialog, setEditOwnerDialog] = useState<{
-  type: 'phone' | 'date' | null;
-  owner: Resident | null;
-  phone: string;
-  date: string;
-}>({
-  type: null,
-  owner: null,
-  phone: "",
-  date: "",
-});
-const [isEditingOwner, setIsEditingOwner] = useState(false);
-const [editOwnerError, setEditOwnerError] = useState<string | null>(null);
-const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
+    type: 'phone' | 'date' | null;
+    owner: Resident | null;
+    phone: string;
+    date: string;
+  }>({
+    type: null,
+    owner: null,
+    phone: "",
+    date: "",
+  });
+  const [isEditingOwner, setIsEditingOwner] = useState(false);
+  const [editOwnerError, setEditOwnerError] = useState<string | null>(null);
+  const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
 
   const isManager = Boolean(
     user?.iduser && selectedBuilding?.idmodir === user.iduser
@@ -265,13 +278,68 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
 
     try {
       const result = await unitPeopleApi.getByUnit(unitId);
-      setOwners(result.filter((p) => p.naghsh === 'malek'));
-      setTenants(result.filter((p) => p.naghsh === 'saken'));
+      const ownersList = result.filter((p) => p.naghsh === 'مالک');
+      const tenantsList = result.filter((p) => p.naghsh === 'ساکن');
+      setOwners(ownersList);
+      setTenants(tenantsList);
+
+      // بعد از دریافت مالک و ساکن، سوابق رو هم بارگذاری کن
+      if (ownersList.length > 0 || tenantsList.length > 0) {
+        await loadHistory(ownersList, tenantsList);
+      }
     } catch (err) {
       console.error("Load people error:", err);
       setPeopleError("دریافت اطلاعات ساکنان با خطا مواجه شد.");
     } finally {
       setIsLoadingPeople(false);
+    }
+  }, [unitId]);
+
+  const loadHistory = useCallback(async (ownersList: Resident[], tenantsList: Resident[]) => {
+    if (!unitId) return;
+
+    setIsLoadingHistory(true);
+
+    try {
+      // دریافت سوابق مالک
+      if (ownersList.length > 0) {
+        const ownerHistoryData = await unitHistoryApi.getHistory({
+          unitId,
+          userId: ownersList[0]?.iduser || "",
+        });
+        setOwnerHistory(ownerHistoryData.map((item) => ({
+          ...item,
+          naghsh: 'malek' as const,
+          nameuser: ownersList[0]?.nameuser || "مالک",
+          phone: ownersList[0]?.phone || "",
+          datestart: item.startDate,
+          count: item.count,
+          status: item.status,
+          endDate: item.endDate,
+        })));
+      }
+
+      // دریافت سوابق ساکن
+      if (tenantsList.length > 0) {
+        const tenantHistoryData = await unitHistoryApi.getHistory({
+          unitId,
+          userId: tenantsList[0]?.iduser || "",
+        });
+        setTenantHistory(tenantHistoryData.map((item) => ({
+          ...item,
+          naghsh: 'saken' as const,
+          nameuser: tenantsList[0]?.nameuser || "ساکن",
+          phone: tenantsList[0]?.phone || "",
+          datestart: item.startDate,
+          count: item.count,
+          status: item.status,
+          endDate: item.endDate,
+        })));
+      }
+    } catch (error) {
+      console.error("Load history error:", error);
+    } finally {
+      setIsLoadingHistory(false);
     }
   }, [unitId]);
 
@@ -317,7 +385,7 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
   };
 
   // ============================================
-  // Edit Tenant - Phone
+  // Edit Tenant
   // ============================================
 
   const openEditTenantPhone = (tenant: Resident) => {
@@ -332,10 +400,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
     setEditTenantSuccess(false);
   };
 
-  // ============================================
-  // Edit Tenant - Date
-  // ============================================
-
   const openEditTenantDate = (tenant: Resident) => {
     setEditTenantDialog({
       type: 'date',
@@ -348,10 +412,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
     setEditTenantSuccess(false);
   };
 
-  // ============================================
-  // Edit Tenant - Count
-  // ============================================
-
   const openEditTenantCount = (tenant: Resident) => {
     setEditTenantDialog({
       type: 'count',
@@ -363,10 +423,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
     setEditTenantError(null);
     setEditTenantSuccess(false);
   };
-
-  // ============================================
-  // Save Edit Tenant
-  // ============================================
 
   const handleEditTenant = async () => {
     const { type, tenant, phone, date, count } = editTenantDialog;
@@ -381,7 +437,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
       let result;
 
       if (type === 'phone') {
-        // ویرایش شماره موبایل
         if (!phone || phone.length !== 11) {
           setEditTenantError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
           setIsEditingTenant(false);
@@ -393,7 +448,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
           phone: phone,
         });
       } else if (type === 'date') {
-        // ویرایش تاریخ شروع سکونت
         if (!date || date.length !== 10) {
           setEditTenantError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
           setIsEditingTenant(false);
@@ -411,7 +465,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
           date: date,
         });
       } else if (type === 'count') {
-        // ویرایش تعداد نفرات
         if (!count || parseInt(count) <= 0) {
           setEditTenantError("تعداد نفرات را به صورت صحیح وارد کنید.");
           setIsEditingTenant(false);
@@ -430,7 +483,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
 
       if (result?.success) {
         setEditTenantSuccess(true);
-        // بستن دیالوگ بعد از ۱ ثانیه
         setTimeout(() => {
           setEditTenantDialog({
             type: null,
@@ -440,7 +492,7 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
             count: "",
           });
           setEditTenantSuccess(false);
-          void loadPeople(); // رفرش لیست ساکنان
+          void loadPeople();
         }, 1000);
       } else {
         setEditTenantError(result?.message || "ویرایش با خطا مواجه شد.");
@@ -450,6 +502,101 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
       setEditTenantError("ویرایش با خطا مواجه شد.");
     } finally {
       setIsEditingTenant(false);
+    }
+  };
+
+  // ============================================
+  // Edit Owner
+  // ============================================
+
+  const openEditOwnerPhone = (owner: Resident) => {
+    setEditOwnerDialog({
+      type: 'phone',
+      owner,
+      phone: owner.phone || "",
+      date: owner.datestart || "",
+    });
+    setEditOwnerError(null);
+    setEditOwnerSuccess(false);
+  };
+
+  const openEditOwnerDate = (owner: Resident) => {
+    setEditOwnerDialog({
+      type: 'date',
+      owner,
+      phone: owner.phone || "",
+      date: owner.datestart || "",
+    });
+    setEditOwnerError(null);
+    setEditOwnerSuccess(false);
+  };
+
+  const handleEditOwner = async () => {
+    const { type, owner, phone, date } = editOwnerDialog;
+
+    if (!owner) return;
+
+    setIsEditingOwner(true);
+    setEditOwnerError(null);
+    setEditOwnerSuccess(false);
+
+    try {
+      let result;
+
+      if (type === 'phone') {
+        if (!phone || phone.length !== 11) {
+          setEditOwnerError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
+          setIsEditingOwner(false);
+          return;
+        }
+
+        result = await unitPeopleApi.editOwnerPhone({
+          idnaghsh: owner.idnaghsh,
+          phone: phone,
+        });
+      } else if (type === 'date') {
+        if (!date || date.length !== 10) {
+          setEditOwnerError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
+          setIsEditingOwner(false);
+          return;
+        }
+
+        if (!isValidPersianDate(date)) {
+          setEditOwnerError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
+          setIsEditingOwner(false);
+          return;
+        }
+
+        result = await unitPeopleApi.editOwnerDate({
+          idnaghsh: owner.idnaghsh,
+          date: date,
+        });
+      } else {
+        setEditOwnerError("نوع ویرایش نامعتبر است.");
+        setIsEditingOwner(false);
+        return;
+      }
+
+      if (result?.success) {
+        setEditOwnerSuccess(true);
+        setTimeout(() => {
+          setEditOwnerDialog({
+            type: null,
+            owner: null,
+            phone: "",
+            date: "",
+          });
+          setEditOwnerSuccess(false);
+          void loadPeople();
+        }, 1000);
+      } else {
+        setEditOwnerError(result?.message || "ویرایش با خطا مواجه شد.");
+      }
+    } catch (err) {
+      console.error("Edit owner error:", err);
+      setEditOwnerError("ویرایش با خطا مواجه شد.");
+    } finally {
+      setIsEditingOwner(false);
     }
   };
 
@@ -566,109 +713,6 @@ const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
     setAddError(null);
     setAddDialogOpen(true);
   };
-// ============================================
-// Edit Owner - Phone
-// ============================================
-  const openEditOwnerPhone = (owner: Resident) => {
-  setEditOwnerDialog({
-    type: 'phone',
-    owner,
-    phone: owner.phone || "",
-    date: owner.datestart || "",
-  });
-  setEditOwnerError(null);
-  setEditOwnerSuccess(false);
-};
-
-// ============================================
-// Edit Owner - Date
-// ============================================
-
-const openEditOwnerDate = (owner: Resident) => {
-  setEditOwnerDialog({
-    type: 'date',
-    owner,
-    phone: owner.phone || "",
-    date: owner.datestart || "",
-  });
-  setEditOwnerError(null);
-  setEditOwnerSuccess(false);
-};
-
-// ============================================
-// Save Edit Owner
-// ============================================
-
-const handleEditOwner = async () => {
-  const { type, owner, phone, date } = editOwnerDialog;
-
-  if (!owner) return;
-
-  setIsEditingOwner(true);
-  setEditOwnerError(null);
-  setEditOwnerSuccess(false);
-
-  try {
-    let result;
-
-    if (type === 'phone') {
-      // ویرایش شماره موبایل
-      if (!phone || phone.length !== 11) {
-        setEditOwnerError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
-        setIsEditingOwner(false);
-        return;
-      }
-
-      result = await unitPeopleApi.editOwnerPhone({
-        idnaghsh: owner.idnaghsh,
-        phone: phone,
-      });
-    } else if (type === 'date') {
-      // ویرایش تاریخ شروع مالکیت
-      if (!date || date.length !== 10) {
-        setEditOwnerError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-        setIsEditingOwner(false);
-        return;
-      }
-
-      if (!isValidPersianDate(date)) {
-        setEditOwnerError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-        setIsEditingOwner(false);
-        return;
-      }
-
-      result = await unitPeopleApi.editOwnerDate({
-        idnaghsh: owner.idnaghsh,
-        date: date,
-      });
-    } else {
-      setEditOwnerError("نوع ویرایش نامعتبر است.");
-      setIsEditingOwner(false);
-      return;
-    }
-
-    if (result?.success) {
-      setEditOwnerSuccess(true);
-      setTimeout(() => {
-        setEditOwnerDialog({
-          type: null,
-          owner: null,
-          phone: "",
-          date: "",
-        });
-        setEditOwnerSuccess(false);
-        void loadPeople();
-      }, 1000);
-    } else {
-      setEditOwnerError(result?.message || "ویرایش با خطا مواجه شد.");
-    }
-  } catch (err) {
-    console.error("Edit owner error:", err);
-    setEditOwnerError("ویرایش با خطا مواجه شد.");
-  } finally {
-    setIsEditingOwner(false);
-  }
-};
 
   // ============================================
   // Navigate to History
@@ -677,7 +721,6 @@ const handleEditOwner = async () => {
   const goToHistory = (userId: string) => {
     router.push(`/units/${unitId}/history?userId=${userId}`);
   };
-  
 
   // ============================================
   // Render
@@ -993,128 +1036,119 @@ const handleEditOwner = async () => {
             {/* ============================================
                 Owners Tab
                 ============================================ */}
-            {/* ============================================
-    Owners Tab - با دکمه‌های ویرایش مجزا
-    ============================================ */}
-<TabsContent value="owners" className="mt-4 space-y-4">
-  {isLoadingPeople ? (
-    <div className="space-y-3">
-      <Skeleton className="h-24 w-full" />
-      <Skeleton className="h-24 w-full" />
-    </div>
-  ) : peopleError ? (
-    <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription>{peopleError}</AlertDescription>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mr-auto"
-        onClick={() => void loadPeople()}
-      >
-        تلاش مجدد
-      </Button>
-    </Alert>
-  ) : owners.length === 0 ? (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <User className="h-12 w-12 text-muted-foreground/50" />
-      <p className="mt-3 text-sm text-muted-foreground">
-        مالکی برای این واحد ثبت نشده است.
-      </p>
-    </div>
-  ) : (
-    owners.map((owner) => (
-      <div
-        key={owner.idnaghsh}
-        className="rounded-lg border p-4"
-      >
-        {/* اطلاعات مالک */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="font-semibold">
-              {owner.nameuser || "نامشخص"}
-            </p>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Phone className="h-3.5 w-3.5" />
-                {owner.phone || "—"}
-              </span>
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" />
-                از {owner.datestart}
-              </span>
-            </div>
-          </div>
+            <TabsContent value="owners" className="mt-4 space-y-4">
+              {isLoadingPeople ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              ) : peopleError ? (
+                <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{peopleError}</AlertDescription>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mr-auto"
+                    onClick={() => void loadPeople()}
+                  >
+                    تلاش مجدد
+                  </Button>
+                </Alert>
+              ) : owners.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <User className="h-12 w-12 text-muted-foreground/50" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    مالکی برای این واحد ثبت نشده است.
+                  </p>
+                </div>
+              ) : (
+                owners.map((owner) => (
+                  <div
+                    key={owner.idnaghsh}
+                    className="rounded-lg border p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-semibold">
+                          {owner.nameuser || "نامشخص"}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3.5 w-3.5" />
+                            {owner.phone || "—"}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            از {owner.datestart}
+                          </span>
+                        </div>
+                      </div>
 
-          <div className="flex shrink-0 flex-wrap gap-1">
-            {/* دکمه سوابق */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => goToHistory(owner.iduser)}
-            >
-              <Clock className="h-4 w-4" />
-              سوابق
-            </Button>
-          </div>
-        </div>
+                      <div className="flex shrink-0 flex-wrap gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => goToHistory(owner.iduser)}
+                        >
+                          <Clock className="h-4 w-4" />
+                          سوابق
+                        </Button>
+                      </div>
+                    </div>
 
-        {/* دکمه‌های ویرایش مجزا برای مالک - فقط برای مدیر */}
-        {isManager && (
-          <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-            {/* ویرایش شماره موبایل */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => openEditOwnerPhone(owner)}
-            >
-              <Phone className="h-3.5 w-3.5" />
-              ویرایش شماره
-            </Button>
+                    {isManager && (
+                      <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs"
+                          onClick={() => openEditOwnerPhone(owner)}
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                          ویرایش شماره
+                        </Button>
 
-            {/* ویرایش تاریخ شروع مالکیت */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => openEditOwnerDate(owner)}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              ویرایش تاریخ
-            </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs"
+                          onClick={() => openEditOwnerDate(owner)}
+                        >
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          ویرایش تاریخ
+                        </Button>
 
-            {/* حذف/پایان مالکیت */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
-              onClick={() => openDeleteDialog(owner)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              پایان مالکیت
-            </Button>
-          </div>
-        )}
-      </div>
-    ))
-  )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                          onClick={() => openDeleteDialog(owner)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          پایان مالکیت
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
 
-  {isManager && (
-    <Button
-      variant="outline"
-      className="w-full gap-2"
-      onClick={() => openAddDialog('malek')}
-    >
-      <Plus className="h-4 w-4" />
-      افزودن مالک
-    </Button>
-  )}
-</TabsContent>
+              {isManager && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => openAddDialog('malek')}
+                >
+                  <Plus className="h-4 w-4" />
+                  افزودن مالک
+                </Button>
+              )}
+            </TabsContent>
 
             {/* ============================================
-                Tenants Tab - با دکمه‌های ویرایش مجزا
+                Tenants Tab
                 ============================================ */}
             <TabsContent value="tenants" className="mt-4 space-y-4">
               {isLoadingPeople ? (
@@ -1148,7 +1182,6 @@ const handleEditOwner = async () => {
                     key={tenant.idnaghsh}
                     className="rounded-lg border p-4"
                   >
-                    {/* اطلاعات ساکن */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1 space-y-1">
                         <p className="font-semibold">
@@ -1171,7 +1204,6 @@ const handleEditOwner = async () => {
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-1">
-                        {/* دکمه سوابق */}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1184,10 +1216,8 @@ const handleEditOwner = async () => {
                       </div>
                     </div>
 
-                    {/* دکمه‌های ویرایش مجزا برای ساکن - فقط برای مدیر */}
                     {isManager && (
                       <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                        {/* ویرایش شماره موبایل */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1198,7 +1228,6 @@ const handleEditOwner = async () => {
                           ویرایش شماره
                         </Button>
 
-                        {/* ویرایش تاریخ شروع */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1209,7 +1238,6 @@ const handleEditOwner = async () => {
                           ویرایش تاریخ
                         </Button>
 
-                        {/* ویرایش تعداد نفرات */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1220,7 +1248,6 @@ const handleEditOwner = async () => {
                           ویرایش نفرات
                         </Button>
 
-                        {/* حذف/پایان سکونت */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1250,6 +1277,123 @@ const handleEditOwner = async () => {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* ============================================
+          History Section - سوابق
+          ============================================ */}
+      {(ownerHistory.length > 0 || tenantHistory.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              سوابق سکونت
+            </CardTitle>
+            <CardDescription>
+              سوابق سکونت مالک و ساکنان این واحد
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoadingHistory ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : (
+              <>
+                {/* سوابق مالک */}
+                {ownerHistory.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-muted-foreground">
+                      سوابق مالک
+                    </h4>
+                    <div className="space-y-2">
+                      {ownerHistory.map((item) => (
+                        <div
+                          key={item.idnaghsh}
+                          className="rounded-lg border p-3 text-sm"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">
+                              {item.nameuser || "مالک"}
+                            </span>
+                            <Badge
+                              variant={item.status === 'active' ? 'default' : 'secondary'}
+                              className={item.status === 'active' ? 'bg-success' : ''}
+                            >
+                              {item.status === 'active' ? 'فعال' : 'پایان یافته'}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                            <span>از {item.datestart}</span>
+                            <span>تا {item.endDate || "تا کنون"}</span>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            تعداد نفرات: {item.count}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 gap-1.5 text-xs"
+                            onClick={() => goToHistory(item.iduser)}
+                          >
+                            <Eye className="h-3 w-3" />
+                            مشاهده جزئیات
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* سوابق ساکن */}
+                {tenantHistory.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-muted-foreground">
+                      سوابق ساکن
+                    </h4>
+                    <div className="space-y-2">
+                      {tenantHistory.map((item) => (
+                        <div
+                          key={item.idnaghsh}
+                          className="rounded-lg border p-3 text-sm"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">
+                              {item.nameuser || "ساکن"}
+                            </span>
+                            <Badge
+                              variant={item.status === 'active' ? 'default' : 'secondary'}
+                              className={item.status === 'active' ? 'bg-success' : ''}
+                            >
+                              {item.status === 'active' ? 'فعال' : 'پایان یافته'}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                            <span>از {item.datestart}</span>
+                            <span>تا {item.endDate || "تا کنون"}</span>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            تعداد نفرات: {item.count}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 gap-1.5 text-xs"
+                            onClick={() => goToHistory(item.iduser)}
+                          >
+                            <Eye className="h-3 w-3" />
+                            مشاهده جزئیات
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ============================================
           Delete Dialog
@@ -1339,7 +1483,7 @@ const handleEditOwner = async () => {
       </Dialog>
 
       {/* ============================================
-          Edit Tenant Dialog (یک دیالوگ برای هر سه نوع)
+          Edit Tenant Dialog
           ============================================ */}
       <Dialog
         open={editTenantDialog.type !== null}
@@ -1370,7 +1514,6 @@ const handleEditOwner = async () => {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* ویرایش شماره موبایل */}
             {editTenantDialog.type === 'phone' && (
               <div className="space-y-2">
                 <Label htmlFor="editPhone">شماره موبایل</Label>
@@ -1395,7 +1538,6 @@ const handleEditOwner = async () => {
               </div>
             )}
 
-            {/* ویرایش تاریخ شروع */}
             {editTenantDialog.type === 'date' && (
               <div className="space-y-2">
                 <Label htmlFor="editDate">تاریخ شروع سکونت (شمسی)</Label>
@@ -1419,7 +1561,6 @@ const handleEditOwner = async () => {
               </div>
             )}
 
-            {/* ویرایش تعداد نفرات */}
             {editTenantDialog.type === 'count' && (
               <div className="space-y-2">
                 <Label htmlFor="editCount">تعداد نفرات</Label>
@@ -1441,12 +1582,10 @@ const handleEditOwner = async () => {
               </div>
             )}
 
-            {/* نمایش خطا */}
             {editTenantError && (
               <p className="text-sm text-destructive">{editTenantError}</p>
             )}
 
-            {/* نمایش موفقیت */}
             {editTenantSuccess && (
               <p className="text-sm text-success">✓ ویرایش با موفقیت انجام شد.</p>
             )}
@@ -1492,134 +1631,131 @@ const handleEditOwner = async () => {
         </DialogContent>
       </Dialog>
 
-{/* ============================================
-    Edit Owner Dialog (برای مالک)
-    ============================================ */}
-<Dialog
-  open={editOwnerDialog.type !== null}
-  onOpenChange={(open) => {
-    if (!open) {
-      setEditOwnerDialog({
-        type: null,
-        owner: null,
-        phone: "",
-        date: "",
-      });
-      setEditOwnerError(null);
-      setEditOwnerSuccess(false);
-    }
-  }}
->
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>
-        {editOwnerDialog.type === 'phone' && 'ویرایش شماره موبایل مالک'}
-        {editOwnerDialog.type === 'date' && 'ویرایش تاریخ شروع مالکیت'}
-      </DialogTitle>
-      <DialogDescription>
-        {editOwnerDialog.owner?.nameuser || 'مالک'}
-      </DialogDescription>
-    </DialogHeader>
-
-    <div className="space-y-4 py-4">
-      {/* ویرایش شماره موبایل */}
-      {editOwnerDialog.type === 'phone' && (
-        <div className="space-y-2">
-          <Label htmlFor="editOwnerPhone">شماره موبایل</Label>
-          <Input
-            id="editOwnerPhone"
-            dir="ltr"
-            type="tel"
-            maxLength={11}
-            placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-            value={editOwnerDialog.phone}
-            onChange={(e) => {
-              setEditOwnerDialog((prev) => ({
-                ...prev,
-                phone: e.target.value.replace(/\D/g, ""),
-              }));
-              setEditOwnerError(null);
-            }}
-          />
-          <p className="text-xs text-muted-foreground">
-            شماره را با ۰ شروع کنید (۱۱ رقم)
-          </p>
-        </div>
-      )}
-
-      {/* ویرایش تاریخ شروع */}
-      {editOwnerDialog.type === 'date' && (
-        <div className="space-y-2">
-          <Label htmlFor="editOwnerDate">تاریخ شروع مالکیت (شمسی)</Label>
-          <Input
-            id="editOwnerDate"
-            dir="ltr"
-            placeholder="مثال: 1404/01/01"
-            value={editOwnerDialog.date}
-            onChange={(e) => {
-              setEditOwnerDialog((prev) => ({
-                ...prev,
-                date: e.target.value,
-              }));
-              setEditOwnerError(null);
-            }}
-            className="font-mono"
-          />
-          <p className="text-xs text-muted-foreground">
-            فرمت: سال/ماه/روز (مثال: 1404/01/01)
-          </p>
-        </div>
-      )}
-
-      {/* نمایش خطا */}
-      {editOwnerError && (
-        <p className="text-sm text-destructive">{editOwnerError}</p>
-      )}
-
-      {/* نمایش موفقیت */}
-      {editOwnerSuccess && (
-        <p className="text-sm text-success">✓ ویرایش با موفقیت انجام شد.</p>
-      )}
-    </div>
-
-    <DialogFooter className="gap-2">
-      <Button
-        variant="outline"
-        onClick={() => {
-          setEditOwnerDialog({
-            type: null,
-            owner: null,
-            phone: "",
-            date: "",
-          });
-          setEditOwnerError(null);
-          setEditOwnerSuccess(false);
+      {/* ============================================
+          Edit Owner Dialog
+          ============================================ */}
+      <Dialog
+        open={editOwnerDialog.type !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditOwnerDialog({
+              type: null,
+              owner: null,
+              phone: "",
+              date: "",
+            });
+            setEditOwnerError(null);
+            setEditOwnerSuccess(false);
+          }
         }}
-        disabled={isEditingOwner}
       >
-        انصراف
-      </Button>
-      <Button
-        onClick={() => void handleEditOwner()}
-        disabled={isEditingOwner || editOwnerSuccess}
-      >
-        {isEditingOwner ? (
-          <>
-            <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-            در حال ذخیره...
-          </>
-        ) : editOwnerSuccess ? (
-          <>
-            <CheckCircle className="ml-2 h-4 w-4" />
-            انجام شد
-          </>
-        ) : (
-          "ذخیره"
-        )}
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editOwnerDialog.type === 'phone' && 'ویرایش شماره موبایل مالک'}
+              {editOwnerDialog.type === 'date' && 'ویرایش تاریخ شروع مالکیت'}
+            </DialogTitle>
+            <DialogDescription>
+              {editOwnerDialog.owner?.nameuser || 'مالک'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {editOwnerDialog.type === 'phone' && (
+              <div className="space-y-2">
+                <Label htmlFor="editOwnerPhone">شماره موبایل</Label>
+                <Input
+                  id="editOwnerPhone"
+                  dir="ltr"
+                  type="tel"
+                  maxLength={11}
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                  value={editOwnerDialog.phone}
+                  onChange={(e) => {
+                    setEditOwnerDialog((prev) => ({
+                      ...prev,
+                      phone: e.target.value.replace(/\D/g, ""),
+                    }));
+                    setEditOwnerError(null);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  شماره را با ۰ شروع کنید (۱۱ رقم)
+                </p>
+              </div>
+            )}
+
+            {editOwnerDialog.type === 'date' && (
+              <div className="space-y-2">
+                <Label htmlFor="editOwnerDate">تاریخ شروع مالکیت (شمسی)</Label>
+                <Input
+                  id="editOwnerDate"
+                  dir="ltr"
+                  placeholder="مثال: 1404/01/01"
+                  value={editOwnerDialog.date}
+                  onChange={(e) => {
+                    setEditOwnerDialog((prev) => ({
+                      ...prev,
+                      date: e.target.value,
+                    }));
+                    setEditOwnerError(null);
+                  }}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  فرمت: سال/ماه/روز (مثال: 1404/01/01)
+                </p>
+              </div>
+            )}
+
+            {editOwnerError && (
+              <p className="text-sm text-destructive">{editOwnerError}</p>
+            )}
+
+            {editOwnerSuccess && (
+              <p className="text-sm text-success">✓ ویرایش با موفقیت انجام شد.</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditOwnerDialog({
+                  type: null,
+                  owner: null,
+                  phone: "",
+                  date: "",
+                });
+                setEditOwnerError(null);
+                setEditOwnerSuccess(false);
+              }}
+              disabled={isEditingOwner}
+            >
+              انصراف
+            </Button>
+            <Button
+              onClick={() => void handleEditOwner()}
+              disabled={isEditingOwner || editOwnerSuccess}
+            >
+              {isEditingOwner ? (
+                <>
+                  <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                  در حال ذخیره...
+                </>
+              ) : editOwnerSuccess ? (
+                <>
+                  <CheckCircle className="ml-2 h-4 w-4" />
+                  انجام شد
+                </>
+              ) : (
+                "ذخیره"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ============================================
           Add Person Dialog
           ============================================ */}

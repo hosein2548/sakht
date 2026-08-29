@@ -1,3 +1,4 @@
+// src/features/units/api/unit-people.api.ts
 import { apiClient } from "@/src/core/api/client";
 
 // ============================================
@@ -37,6 +38,16 @@ export interface EditTenantCountParams {
   count: string;
 }
 
+export interface EditOwnerPhoneParams {
+  idnaghsh: string;
+  phone: string;
+}
+
+export interface EditOwnerDateParams {
+  idnaghsh: string;
+  date: string;
+}
+
 export interface ApiResponse {
   success: boolean;
   message?: string;
@@ -58,37 +69,37 @@ export function getTodayPersian(): string {
 export function isValidPersianDate(date: string): boolean {
   const pattern = /^(\d{4})\/(\d{2})\/(\d{2})$/;
   if (!pattern.test(date)) return false;
-  
+
   const [, year, month, day] = date.match(pattern) || [];
   const y = parseInt(year);
   const m = parseInt(month);
   const d = parseInt(day);
-  
+
   if (y < 1300 || y > 1500) return false;
   if (m < 1 || m > 12) return false;
   if (d < 1 || d > 31) return false;
-  
+
   const daysInMonth = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
   if (d > daysInMonth[m - 1]) return false;
-  
+
   return true;
 }
 
 function parsePeopleResponse(raw: string): Resident[] {
-  console.log("Raw people response:", raw);
+  console.log("📋 Raw people response:", raw);
 
   if (raw === "no" || raw === "") {
     return [];
   }
 
   if (!raw.startsWith("ok")) {
-    console.warn("Unexpected response format:", raw);
+    console.warn("⚠️ Unexpected response format:", raw);
     return [];
   }
 
   const jsonStart = raw.indexOf("[");
   if (jsonStart === -1) {
-    console.warn("No JSON array found in response:", raw);
+    console.warn("⚠️ No JSON array found in response:", raw);
     return [];
   }
 
@@ -97,7 +108,7 @@ function parsePeopleResponse(raw: string): Resident[] {
     const data = JSON.parse(jsonText);
 
     if (!Array.isArray(data)) {
-      console.warn("Response is not an array:", data);
+      console.warn("⚠️ Response is not an array:", data);
       return [];
     }
 
@@ -111,19 +122,9 @@ function parsePeopleResponse(raw: string): Resident[] {
       naghsh: item.naghsh === "malek" ? "مالک" : "ساکن",
     }));
   } catch (error) {
-    console.error("Cannot parse people response:", error);
+    console.error("❌ Cannot parse people response:", error);
     return [];
   }
-}
-
-export interface EditOwnerPhoneParams {
-  idnaghsh: string;
-  phone: string;
-}
-
-export interface EditOwnerDateParams {
-  idnaghsh: string;
-  date: string;
 }
 
 // ============================================
@@ -134,22 +135,18 @@ export const unitPeopleApi = {
   // ============================================
   // دریافت لیست مالک و ساکنان
   // ============================================
-  
+
   async getByUnit(unitId: string): Promise<Resident[]> {
     try {
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idv: unitId,
-          statephp: "getmaleksaken",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idv: unitId,
+        statephp: "getmaleksaken",
+      });
 
       const raw = String(response.data ?? "");
       return parsePeopleResponse(raw);
-      
     } catch (error) {
-      console.error("Get people error:", error);
+      console.error("❌ Get people error:", error);
       throw new Error("دریافت اطلاعات ساکنان با خطا مواجه شد.");
     }
   },
@@ -157,7 +154,7 @@ export const unitPeopleApi = {
   // ============================================
   // افزودن مالک یا ساکن جدید
   // ============================================
-  
+
   async addPerson(params: AddPersonParams): Promise<ApiResponse> {
     try {
       if (!isValidPersianDate(params.date)) {
@@ -167,20 +164,17 @@ export const unitPeopleApi = {
         };
       }
 
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idv: params.unitId,
-          phone: params.phone,
-          date: params.date,
-          countp: params.count || "0",
-          naghsh: params.naghsh,
-          statephp: "SaveNewMalekSaken",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idv: params.unitId,
+        phone: params.phone,
+        date: params.date,
+        countp: params.count || "0",
+        naghsh: params.naghsh,
+        statephp: "SaveNewMalekSaken",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Add person response:", raw);
+      console.log("➕ Add person response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -200,9 +194,8 @@ export const unitPeopleApi = {
         success: false,
         message: "افزودن با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Add person error:", error);
+      console.error("❌ Add person error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
@@ -212,23 +205,19 @@ export const unitPeopleApi = {
 
   // ============================================
   // ویرایش شماره موبایل ساکن
-  // مطابق با فلاتر: fetchEditMalekSaken_SendToServer با statephp: "edit_saken_phone"
   // ============================================
-  
+
   async editTenantPhone(params: EditTenantPhoneParams): Promise<ApiResponse> {
     try {
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: params.idnaghsh,
-          phone: params.phone,
-          naghsh: "saken",
-          statephp: "edit_saken_phone",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: params.idnaghsh,
+        phone: params.phone,
+        naghsh: "saken",
+        statephp: "edit_saken_phone",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Edit tenant phone response:", raw);
+      console.log("📱 Edit tenant phone response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -248,9 +237,8 @@ export const unitPeopleApi = {
         success: false,
         message: "ویرایش شماره با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Edit tenant phone error:", error);
+      console.error("❌ Edit tenant phone error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
@@ -260,9 +248,8 @@ export const unitPeopleApi = {
 
   // ============================================
   // ویرایش تاریخ شروع سکونت
-  // مطابق با فلاتر: fetchEditMalekSaken_SendToServer با statephp: "edit_saken_date"
   // ============================================
-  
+
   async editTenantDate(params: EditTenantDateParams): Promise<ApiResponse> {
     try {
       if (!isValidPersianDate(params.date)) {
@@ -272,18 +259,15 @@ export const unitPeopleApi = {
         };
       }
 
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: params.idnaghsh,
-          date: params.date,
-          naghsh: "saken",
-          statephp: "edit_saken_date",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: params.idnaghsh,
+        date: params.date,
+        naghsh: "saken",
+        statephp: "edit_saken_date",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Edit tenant date response:", raw);
+      console.log("📅 Edit tenant date response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -296,9 +280,8 @@ export const unitPeopleApi = {
         success: false,
         message: "ویرایش تاریخ با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Edit tenant date error:", error);
+      console.error("❌ Edit tenant date error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
@@ -308,23 +291,19 @@ export const unitPeopleApi = {
 
   // ============================================
   // ویرایش تعداد نفرات ساکن
-  // مطابق با فلاتر: fetchEditMalekSaken_SendToServer با statephp: "edit_saken_count"
   // ============================================
-  
+
   async editTenantCount(params: EditTenantCountParams): Promise<ApiResponse> {
     try {
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: params.idnaghsh,
-          countp: params.count,
-          naghsh: "saken",
-          statephp: "edit_saken_count",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: params.idnaghsh,
+        countp: params.count,
+        naghsh: "saken",
+        statephp: "edit_saken_count",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Edit tenant count response:", raw);
+      console.log("👥 Edit tenant count response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -337,9 +316,8 @@ export const unitPeopleApi = {
         success: false,
         message: "ویرایش تعداد نفرات با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Edit tenant count error:", error);
+      console.error("❌ Edit tenant count error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
@@ -348,65 +326,20 @@ export const unitPeopleApi = {
   },
 
   // ============================================
-  // حذف/پایان دوره مالک یا ساکن
+  // ویرایش شماره موبایل مالک
   // ============================================
-  
-  async deletePerson(idnaghsh: string, endDate: string): Promise<ApiResponse> {
-    try {
-      if (!isValidPersianDate(endDate)) {
-        return {
-          success: false,
-          message: "تاریخ پایان معتبر نیست. فرمت صحیح: 1404/01/01",
-        };
-      }
-
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: idnaghsh,
-          date: endDate,
-          statephp: "DeleteMalekSaken",
-        }
-      );
-
-      const raw = String(response.data ?? "");
-      console.log("Delete person response:", raw);
-
-      if (raw.startsWith("ok")) {
-        return {
-          success: true,
-          message: "پایان دوره با موفقیت انجام شد.",
-        };
-      }
-
-      return {
-        success: false,
-        message: "پایان دوره با خطا مواجه شد.",
-      };
-      
-    } catch (error) {
-      console.error("Delete person error:", error);
-      return {
-        success: false,
-        message: "ارتباط با سرور برقرار نشد.",
-      };
-    }
-  },
 
   async editOwnerPhone(params: EditOwnerPhoneParams): Promise<ApiResponse> {
     try {
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: params.idnaghsh,
-          phone: params.phone,
-          naghsh: "malek",
-          statephp: "editmalek",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: params.idnaghsh,
+        phone: params.phone,
+        naghsh: "malek",
+        statephp: "editmalek",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Edit owner phone response:", raw);
+      console.log("📱 Edit owner phone response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -426,9 +359,8 @@ export const unitPeopleApi = {
         success: false,
         message: "ویرایش شماره با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Edit owner phone error:", error);
+      console.error("❌ Edit owner phone error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
@@ -438,10 +370,8 @@ export const unitPeopleApi = {
 
   // ============================================
   // ویرایش تاریخ شروع مالکیت
-  // مطابق با فلاتر: fetchEditMalekSaken_SendToServer با statephp: "editmalek"
-  // (تاریخ هم در همان درخواست ارسال میشه)
   // ============================================
-  
+
   async editOwnerDate(params: EditOwnerDateParams): Promise<ApiResponse> {
     try {
       if (!isValidPersianDate(params.date)) {
@@ -451,18 +381,15 @@ export const unitPeopleApi = {
         };
       }
 
-      const response = await apiClient.post<string>(
-        "/vahed.php",
-        {
-          idnaghsh: params.idnaghsh,
-          date: params.date,
-          naghsh: "malek",
-          statephp: "editmalek",
-        }
-      );
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: params.idnaghsh,
+        date: params.date,
+        naghsh: "malek",
+        statephp: "editmalek_date",
+      });
 
       const raw = String(response.data ?? "");
-      console.log("Edit owner date response:", raw);
+      console.log("📅 Edit owner date response:", raw);
 
       if (raw.startsWith("ok")) {
         return {
@@ -475,18 +402,61 @@ export const unitPeopleApi = {
         success: false,
         message: "ویرایش تاریخ با خطا مواجه شد.",
       };
-      
     } catch (error) {
-      console.error("Edit owner date error:", error);
+      console.error("❌ Edit owner date error:", error);
       return {
         success: false,
         message: "ارتباط با سرور برقرار نشد.",
       };
     }
   },
-  // Backward-compatible facade for the unit people page.
-  // The feature API above uses explicit, strongly-typed operation names;
-  // these aliases keep older page code working while it is being migrated.
+
+  // ============================================
+  // حذف/پایان دوره مالک یا ساکن
+  // ============================================
+
+  async deletePerson(idnaghsh: string, endDate: string): Promise<ApiResponse> {
+    try {
+      if (!isValidPersianDate(endDate)) {
+        return {
+          success: false,
+          message: "تاریخ پایان معتبر نیست. فرمت صحیح: 1404/01/01",
+        };
+      }
+
+      const response = await apiClient.post<string>("/vahed.php", {
+        idnaghsh: idnaghsh,
+        date: endDate,
+        statephp: "DeleteMalekSaken",
+      });
+
+      const raw = String(response.data ?? "");
+      console.log("🗑️ Delete person response:", raw);
+
+      if (raw.startsWith("ok")) {
+        return {
+          success: true,
+          message: "پایان دوره با موفقیت انجام شد.",
+        };
+      }
+
+      return {
+        success: false,
+        message: "پایان دوره با خطا مواجه شد.",
+      };
+    } catch (error) {
+      console.error("❌ Delete person error:", error);
+      return {
+        success: false,
+        message: "ارتباط با سرور برقرار نشد.",
+      };
+    }
+  },
+
+  // ============================================
+  // Backward-compatible facade
+  // ============================================
+
   async getAll(unitId: string): Promise<Resident[]> {
     return this.getByUnit(unitId);
   },
@@ -536,5 +506,4 @@ export const unitPeopleApi = {
   async remove(person: Resident): Promise<ApiResponse> {
     return this.deletePerson(person.idnaghsh, getTodayPersian());
   },
-
 };

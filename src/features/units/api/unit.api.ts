@@ -1,105 +1,52 @@
+// src/features/units/api/unit.api.ts
 import { apiClient } from "@/src/core/api/client";
-
-import type {
-  UnitSummary,
-} from "../types/unit.types";
+import type { UnitSummary } from "../types/unit.types";
 
 export const unitApi = {
-  async getAll(
-    buildingId: string
-  ): Promise<UnitSummary[]> {
-    const response =
-      await apiClient.post<string>(
-        "/vahed.php",
-        {
-          ids: buildingId,
-          statephp: "getAllvahed",
-        }
-      );
+  async getAll(buildingId: string): Promise<UnitSummary[]> {
+    const response = await apiClient.post<string>("/vahed.php", {
+      ids: buildingId,
+      statephp: "getAllvahed",
+    });
 
-    const raw =
-      String(response.data ?? "");
+    const raw = String(response.data ?? "");
+    console.log("🔍 getAllvahed RAW response:", raw); // برای دیباگ
 
-    console.log(
-      "getAllvahed response:",
-      raw
-    );
-
-    if (
-      raw === "no" ||
-      raw === ""
-    ) {
+    if (raw === "no" || raw === "") {
       return [];
     }
 
     if (!raw.startsWith("ok")) {
-      throw new Error(
-        "دریافت اطلاعات واحدها ناموفق بود."
-      );
+      throw new Error("دریافت اطلاعات واحدها ناموفق بود.");
     }
 
-    const jsonStart =
-      raw.indexOf("[");
-
+    const jsonStart = raw.indexOf("[");
     if (jsonStart === -1) {
-      throw new Error(
-        "فرمت پاسخ واحدها نامعتبر است."
-      );
+      throw new Error("فرمت پاسخ واحدها نامعتبر است.");
     }
 
     try {
-      const data = JSON.parse(
-        raw.substring(jsonStart)
-      );
+      const data = JSON.parse(raw.substring(jsonStart));
 
       if (!Array.isArray(data)) {
         return [];
       }
 
-      return data.map(
-        (item): UnitSummary => ({
-          ids: String(
-            item?.ids ?? ""
-          ),
-
-          names: String(
-            item?.names ?? ""
-          ),
-
-          idmodir: String(
-            item?.idmodir ?? ""
-          ),
-
-          namemodir: String(
-            item?.namemodir ?? ""
-          ),
-
-          idv: String(
-            item?.idv ?? ""
-          ),
-
-          namev: String(
-            item?.namev ?? ""
-          ),
-
-          metter: String(
-            item?.metter ?? ""
-          ),
-
-          countnafar: String(
-            item?.countnafar ?? ""
-          ),
-        })
-      );
+      return data.map((item): UnitSummary => ({
+        ids: String(item?.ids ?? ""),
+        names: String(item?.names ?? ""),
+        idmodir: String(item?.idmodir ?? ""),
+        namemodir: String(item?.namemodir ?? ""),
+        idv: String(item?.idv ?? ""),
+        namev: String(item?.namev ?? ""),
+        // ✅ اصلاح: استفاده از `metraj` به جای `metter`
+        metter: String(item?.metraj ?? item?.metter ?? ""),
+        // ✅ اصلاح: استفاده از `tedad` به جای `countnafar`
+        countnafar: String(item?.tedad ?? item?.countnafar ?? ""),
+      }));
     } catch (error) {
-      console.error(
-        "Cannot parse getAllvahed response:",
-        error
-      );
-
-      throw new Error(
-        "خواندن اطلاعات واحدها ناموفق بود."
-      );
+      console.error("Cannot parse getAllvahed response:", error);
+      throw new Error("خواندن اطلاعات واحدها ناموفق بود.");
     }
   },
 };
