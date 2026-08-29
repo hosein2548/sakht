@@ -1,9 +1,7 @@
+// src/app/dashboard/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-
-
-
 import { useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/src/core/store/auth.store";
@@ -37,6 +35,11 @@ import {
   RefreshCw,
   Users,
   Wallet,
+  Edit2,
+  User,
+  Phone,
+  X,
+  Check,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,8 +48,6 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
-
-
 
 import { authStorage } from "@/src/core/storage/auth.storage";
 
@@ -66,13 +67,24 @@ import {
   useDashboardStore,
 } from "@/src/features/dashboard/store/dashboard.store";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+import { apiClient } from "@/src/core/api/client";
+
 export default function DashboardPage() {
-  
   const [isInitializing, setIsInitializing] = useState(true);
-
- 
   const { user, setUser } = useAppStore();
-
   const router = useRouter();
 
   // ============================================
@@ -103,12 +115,6 @@ export default function DashboardPage() {
   const setNotificationError = useNotificationStore((state) => state.setError);
 
   // ============================================
-  // App Store (User)
-  // ============================================
-
-  
-
-  // ============================================
   // Building Store
   // ============================================
 
@@ -129,6 +135,17 @@ export default function DashboardPage() {
   const setError = useDashboardStore((state) => state.setError);
 
   // ============================================
+  // Edit Profile State
+  // ============================================
+
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState(false);
+
+  // ============================================
   // ✅ Mount Check
   // ============================================
 
@@ -141,13 +158,8 @@ export default function DashboardPage() {
   // ============================================
 
   useEffect(() => {
-    // تا زمانی که mounted نشده، کاری نکن
     if (!isMounted) return;
-
-    // اگر در حال بارگذاری احراز هویت هستیم، صبر کن
     if (authLoading) return;
-
-    // اگر احراز هویت نشده یا کاربر وجود نداره → برو به لاگین
     if (!isAuthenticated || !authUser) {
       console.log("❌ Dashboard: Not authenticated, redirecting to login...");
       router.replace("/login");
@@ -173,7 +185,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-
     if (buildings.length > 0 || units.length > 0) return;
 
     void initializeUserContext(user).catch((bootstrapError) => {
@@ -189,7 +200,6 @@ export default function DashboardPage() {
     if (!user) return;
 
     const ids = selectedBuilding?.ids ?? selectedUnit?.ids ?? "";
-
     if (!ids) return;
 
     const loadMainInfo = async () => {
@@ -241,7 +251,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const buildingId = selectedBuilding?.ids ?? selectedUnit?.ids ?? "";
-
     if (!buildingId) return;
 
     const loadAnnouncements = async () => {
@@ -268,17 +277,19 @@ export default function DashboardPage() {
     setAnnouncementsError,
   ]);
 
-   useEffect(() => {
+  // ============================================
+  // Auth Initialization
+  // ============================================
+
+  useEffect(() => {
     const initAuth = async () => {
       try {
-        // اگر در Store کاربر وجود داره، ازش استفاده کن
         if (isAuthenticated && authUser) {
           setUser(authUser);
           setIsInitializing(false);
           return;
         }
 
-        // اگر در Store نبود، از localStorage یا Session بخوان
         const authService = AuthService.getInstance();
         const user = await authService.checkAuth();
 
@@ -287,7 +298,6 @@ export default function DashboardPage() {
           return;
         }
 
-        // اگر هیچکدام نبود، به لاگین برو
         router.replace("/login");
       } catch (error) {
         console.error("[Dashboard] Auth init error:", error);
@@ -301,7 +311,7 @@ export default function DashboardPage() {
   }, [isAuthenticated, authUser, router, setUser]);
 
   // ============================================
-  // ✅ ریدایرکت در صورت عدم احراز هویت
+  // ✅ Redirect if not authenticated
   // ============================================
 
   useEffect(() => {
@@ -311,6 +321,111 @@ export default function DashboardPage() {
       }
     }
   }, [isInitializing, authLoading, isAuthenticated, authUser, user, router]);
+
+  // ============================================
+  // ✅ Edit Profile Handlers
+  // ============================================
+
+  const openEditDialog = () => {
+    setEditName(user?.nameuser || "");
+    setEditPhone(user?.phone || "");
+    setEditError(null);
+    setEditSuccess(false);
+    setEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    if (isEditing) return;
+    setEditDialogOpen(false);
+    setEditError(null);
+    setEditSuccess(false);
+  };
+
+  const handleEditProfile = async () => {
+    if (!user?.iduser) {
+      setEditError("اطلاعات کاربری یافت نشد.");
+      return;
+    }
+
+    if (!editName.trim()) {
+      setEditError("نام خود را وارد کنید.");
+      return;
+    }
+
+    if (editName.trim().length < 2) {
+      setEditError("نام باید حداقل ۲ کاراکتر باشد.");
+      return;
+    }
+
+    setIsEditing(true);
+    setEditError(null);
+    setEditSuccess(false);
+
+    try {
+      // ارسال درخواست به سرور برای ویرایش نام
+      const response = await apiClient.post<string>("/profile.php", {
+        iduser: user.iduser,
+        nameuser: editName.trim(),
+        statephp: "editname",
+      });
+
+      const raw = String(response.data ?? "");
+      console.log("Edit profile response:", raw);
+
+      if (!raw.startsWith("ok")) {
+        setEditError("ویرایش نام انجام نشد.");
+        setIsEditing(false);
+        return;
+      }
+
+      // به‌روزرسانی در Storeهای محلی
+      const updatedUser = {
+        ...user,
+        nameuser: editName.trim(),
+      };
+
+      // به‌روزرسانی در AppStore
+      setUser(updatedUser);
+
+      // به‌روزرسانی در AuthStore
+      const authStore = useAuthStore.getState();
+      if (authStore.user) {
+        authStore.setUser({
+          ...authStore.user,
+          nameuser: editName.trim(),
+        });
+      }
+
+      // به‌روزرسانی در localStorage
+      authStorage.save(updatedUser);
+
+      // به‌روزرسانی در mainInfo (اگر وجود داشته باشد)
+      if (mainInfo) {
+        setMainInfo({
+          ...mainInfo,
+          nameuser: editName.trim(),
+        });
+      }
+
+      setEditSuccess(true);
+      
+      // بستن دیالوگ بعد از ۱ ثانیه
+      setTimeout(() => {
+        setEditDialogOpen(false);
+        setEditSuccess(false);
+        setIsEditing(false);
+      }, 1000);
+
+    } catch (error) {
+      console.error("Edit profile error:", error);
+      setEditError("ارتباط با سرور برقرار نشد.");
+    } finally {
+      if (!editSuccess) {
+        setIsEditing(false);
+      }
+    }
+  };
+
   // ============================================
   // ✅ Loading State
   // ============================================
@@ -416,14 +531,40 @@ export default function DashboardPage() {
       {/* ================================================= */}
 
       <section>
-        <p className="text-sm text-muted-foreground">
-          سلام {mainInfo?.nameuser || user?.nameuser || "کاربر"}
-        </p>
-        <h1 className="mt-1 text-xl font-bold">{buildingName}</h1>
-        {unitName && (
-          <p className="mt-1 text-sm text-muted-foreground">واحد: {unitName}</p>
-        )}
+        <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between"></div>
+          <h1  className="mt-1 text-xl font-bold">ساختمان: {buildingName}</h1>
+          <div></div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            
+            <p className="text-sm text-muted-foreground">
+               {mainInfo?.nameuser || user?.nameuser || "کاربر"}
+            </p>
+            {mainInfo?.phone && (
+            <p className="mt-3 text-sm text-muted-foreground">{mainInfo.phone}</p>
+          )}
+            
+            {unitName && (
+              <p className="mt-1 text-sm text-muted-foreground">واحد: {unitName}</p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={openEditDialog}
+          >
+            <Edit2 className="h-4 w-4" />
+            ویرایش نام
+          </Button>
+        </div>
+        </CardContent>
+      </Card>
       </section>
+
+
 
       {/* ================================================= */}
       {/* Financial Information                            */}
@@ -570,22 +711,136 @@ export default function DashboardPage() {
       {/* User Information                                 */}
       {/* ================================================= */}
 
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">کاربر</p>
-              <p className="mt-1 font-semibold">
-                {mainInfo?.nameuser || user?.nameuser || "کاربر"}
+      
+
+      {/* ================================================= */}
+      {/* Edit Profile Dialog                              */}
+      {/* ================================================= */}
+
+      <Dialog open={editDialogOpen} onOpenChange={closeEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit2 className="h-5 w-5" />
+              ویرایش نام
+            </DialogTitle>
+            <DialogDescription>
+              نام و نام خانوادگی خود را ویرایش کنید.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* نمایش خطا */}
+            {editError && (
+              <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+                <AlertDescription>{editError}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* نمایش موفقیت */}
+            {editSuccess && (
+              <Alert className="border-success/30 bg-success/10 text-success">
+                <Check className="ml-2 h-4 w-4" />
+                <AlertDescription>نام با موفقیت ویرایش شد.</AlertDescription>
+              </Alert>
+            )}
+
+            {/* نام */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">نام و نام خانوادگی</Label>
+              <Input
+                id="edit-name"
+                placeholder="نام کامل خود را وارد کنید"
+                value={editName}
+                onChange={(e) => {
+                  setEditName(e.target.value);
+                  if (editError) setEditError(null);
+                }}
+                disabled={isEditing || editSuccess}
+                maxLength={50}
+              />
+              <p className="text-xs text-muted-foreground">
+                حداقل ۲ کاراکتر و حداکثر ۵۰ کاراکتر
               </p>
             </div>
-            <Home className="h-6 w-6" />
+
+            {/* شماره موبایل (فقط نمایش) */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">شماره موبایل</Label>
+              <div className="relative">
+                <Input
+                  id="edit-phone"
+                  dir="ltr"
+                  value={editPhone}
+                  disabled
+                  className="bg-muted/50"
+                />
+                <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                شماره موبایل قابل ویرایش نیست.
+              </p>
+            </div>
           </div>
-          {mainInfo?.phone && (
-            <p className="mt-3 text-sm text-muted-foreground">{mainInfo.phone}</p>
-          )}
-        </CardContent>
-      </Card>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={closeEditDialog}
+              disabled={isEditing}
+            >
+              <X className="ml-2 h-4 w-4" />
+              انصراف
+            </Button>
+            <Button
+              onClick={() => void handleEditProfile()}
+              disabled={isEditing || editSuccess || !editName.trim()}
+            >
+              {isEditing ? (
+                <>
+                  <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                  در حال ذخیره...
+                </>
+              ) : editSuccess ? (
+                <>
+                  <Check className="ml-2 h-4 w-4" />
+                  انجام شد
+                </>
+              ) : (
+                <>
+                  <SaveIcon className="ml-2 h-4 w-4" />
+                  ذخیره تغییرات
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ============================================
+// Icon Helper (برای Save در Dialog)
+// ============================================
+
+function SaveIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
   );
 }

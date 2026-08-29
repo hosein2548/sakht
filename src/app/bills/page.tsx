@@ -1,3 +1,4 @@
+// src/app/bills/page.tsx
 "use client";
 import { useRouter } from "next/navigation";
 
@@ -8,8 +9,6 @@ import {
 } from "react";
 
 import Link from "next/link";
-
-
 
 import {
   AlertTriangle,
@@ -88,7 +87,7 @@ export default function BillsPage() {
   const selectedBuilding = useBuildingStore((state) => state.selectedBuilding);
   const selectedUnit = useBuildingStore((state) => state.selectedUnit);
 
-  // Store actions - جدا گرفته شدن برای جلوگیری از خطای React Compiler
+  // Store actions
   const buildingBills = useBillingStore((state) => state.buildingBills);
   const unitBills = useBillingStore((state) => state.unitBills);
   const fundBills = useBillingStore((state) => state.fundBills);
@@ -105,6 +104,7 @@ export default function BillsPage() {
   // State
   // ============================================
 
+  // ✅ اصلاح: تشخیص صحیح mode بر اساس انتخاب کاربر
   const [mode, setMode] = useState<BillingMode>(
     selectedBuilding ? "sakhteman" : "vahed"
   );
@@ -118,19 +118,23 @@ export default function BillsPage() {
   const [detailCostPay, setDetailCostPay] = useState<"all" | "cost" | "pay">("all");
 
   const [units, setUnits] = useState<UnitSummary[]>([]);
-  // استفاده از selectedUnit?.idv به عنوان مقدار اولیه
   const [selectedUnitId, setSelectedUnitId] = useState(selectedUnit?.idv ?? "");
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
 
   const buildingId = selectedBuilding?.ids ?? selectedUnit?.ids ?? "";
+  
+  // ✅ اصلاح: تشخیص مدیر بودن
   const isManager = Boolean(
     user?.iduser && selectedBuilding?.idmodir === user.iduser
   );
 
+  // ✅ اصلاح: اگر کاربر مدیر نیست و واحد انتخاب نشده، خطا نمایش بده
+  const isUnitSelected = Boolean(selectedUnitId || selectedUnit?.idv);
+
   // ============================================
-  // Load Units
+  // Load Units (فقط برای مدیر)
   // ============================================
 
   useEffect(() => {
@@ -140,6 +144,7 @@ export default function BillsPage() {
       try {
         const result = await unitApi.getAll(buildingId);
         setUnits(result);
+        // اگر واحدی انتخاب نشده، اولین واحد رو انتخاب کن
         if (result.length > 0 && !selectedUnitId) {
           setSelectedUnitId(result[0].idv);
         }
@@ -149,43 +154,67 @@ export default function BillsPage() {
     };
 
     void loadUnits();
-  }, [buildingId, isManager, selectedUnitId]);
+  }, [buildingId, isManager]);
 
   // ============================================
-  // Load Bill - با useCallback و dependencies صحیح
+  // ✅ تابع بارگذاری صورتحساب (اصلاح شده)
   // ============================================
 
   const loadBill = useCallback(async () => {
-    if (!buildingId) return;
+    if (!buildingId) {
+      console.log("⚠️ No buildingId");
+      return;
+    }
+
+    // اگر کاربر مدیر نیست و واحدی انتخاب نشده
+    if (!isManager && !selectedUnitId && !selectedUnit?.idv) {
+      setError("لطفاً یک واحد را انتخاب کنید.");
+      return;
+    }
 
     try {
       setLoading(true);
       setError(null);
+
+      console.log("🔍 Loading bill with:", {
+        mode,
+        isManager,
+        managerFilter,
+        unitFilter,
+        selectedUnitId,
+        detailPerson,
+        detailCostPay,
+        dateStart,
+        dateEnd,
+      });
 
       // ============================================
       // حالت تجمیعی (ساختمان)
       // ============================================
       if (mode === "sakhteman") {
         let search: "sakhteman-one" | "sakhteman-all" | "sakhteman-bedehkar" = "sakhteman-all";
+        let unitId = "";
 
+        // اگر کاربر مدیر نیست → فقط واحد خودش
         if (!isManager) {
           search = "sakhteman-one";
-        } else if (managerFilter === "debtor") {
+          unitId = selectedUnit?.idv ?? "";
+        } 
+        // اگر مدیر است و فیلتر بدهکار فعال
+        else if (managerFilter === "debtor") {
           search = "sakhteman-bedehkar";
-        } else if (unitFilter === "one" && selectedUnitId) {
+        } 
+        // اگر مدیر است و یک واحد خاص انتخاب شده
+        else if (unitFilter === "one" && selectedUnitId) {
           search = "sakhteman-one";
-        } else {
+          unitId = selectedUnitId;
+        } 
+        // حالت پیش‌فرض: همه واحدها
+        else {
           search = "sakhteman-all";
         }
 
-        let unitId = "";
-        if (!isManager) {
-          unitId = selectedUnitId;
-        } else if (unitFilter === "one" && selectedUnitId) {
-          unitId = selectedUnitId;
-        }
-
-        console.log("🔍 Bill search:", { search, unitId, isManager, unitFilter, selectedUnitId });
+        console.log("📊 Building bill search:", { search, unitId });
 
         const result = await billingApi.getBuilding(buildingId, unitId, search);
         setBuildingBills(result);
@@ -198,15 +227,23 @@ export default function BillsPage() {
       // حالت جزئیات (واحد)
       // ============================================
       if (mode === "vahed") {
-        const unitId = isManager ? selectedUnitId : selectedUnitId;
+        // تعیین واحد
+        let unitId = "";
+        if (isManager) {
+          unitId = selectedUnitId;
+        } else {
+          unitId = selectedUnit?.idv ?? "";
+        }
 
         if (!unitId) {
           setError("واحد موردنظر مشخص نیست.");
           return;
         }
 
+        // تعیین نوع جستجو
         let search: "vahed-one" | "vahed-all" | "vahed-malek" | "vahed-saken" = "vahed-one";
 
+        // اگر مدیر است و فیلتر "همه واحدها" فعال
         if (isManager && unitFilter === "all") {
           if (detailPerson === "malek") {
             search = "vahed-malek";
@@ -217,6 +254,8 @@ export default function BillsPage() {
           }
         }
 
+        console.log("📊 Unit bill search:", { search, unitId });
+
         const result = await billingApi.getUnit(
           buildingId,
           unitId,
@@ -225,6 +264,7 @@ export default function BillsPage() {
           dateEnd
         );
 
+        // فیلترهای سمت کلاینت (برای فیلترهای اضافی)
         let filtered = result;
 
         if (detailPerson !== "all") {
@@ -248,13 +288,17 @@ export default function BillsPage() {
       // ============================================
       // حالت صندوق
       // ============================================
-      const result = await billingApi.getFund(buildingId, dateStart, dateEnd);
-      setFundBills(result);
-      setBuildingBills([]);
-      setUnitBills([]);
+      if (mode === "sandogh") {
+        console.log("📊 Fund bill search:", { dateStart, dateEnd });
+        const result = await billingApi.getFund(buildingId, dateStart, dateEnd);
+        setFundBills(result);
+        setBuildingBills([]);
+        setUnitBills([]);
+        return;
+      }
 
     } catch (requestError) {
-      console.error("Billing error:", requestError);
+      console.error("❌ Billing error:", requestError);
       setError("دریافت صورت‌حساب با خطا مواجه شد.");
     } finally {
       setLoading(false);
@@ -266,34 +310,50 @@ export default function BillsPage() {
     managerFilter,
     unitFilter,
     selectedUnitId,
+    selectedUnit?.idv,
     detailPerson,
     detailCostPay,
     dateStart,
     dateEnd,
-    // توابع setter رو از dependencies حذف کردیم چون از Zustand میان و پایدار هستن
+    setBuildingBills,
+    setUnitBills,
+    setFundBills,
+    setLoading,
+    setError,
   ]);
 
   // ============================================
-  // Effects
+  // ✅ Effects (اصلاح شده)
   // ============================================
 
-  // بارگذاری اولیه
+  // بارگذاری اولیه با تغییر mode یا buildingId
   useEffect(() => {
     if (!buildingId) return;
+    
+    // اگر کاربر مدیر نیست و واحدی انتخاب نشده، صبر کن
+    if (!isManager && !selectedUnit?.idv) return;
+    
+    console.log("🔄 Initial load for:", { mode, buildingId });
     void loadBill();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildingId, mode]);
+  }, [buildingId, mode, isManager, selectedUnit?.idv, loadBill]);
 
   // بارگذاری مجدد هنگام تغییر فیلترها
   useEffect(() => {
     if (!buildingId) return;
+    
+    // اگر کاربر مدیر نیست و واحدی انتخاب نشده
+    if (!isManager && !selectedUnit?.idv) return;
 
+    // بررسی اینکه آیا فیلتر فعالی وجود داره
     let hasActiveFilter = false;
 
     if (mode === "sakhteman") {
       const isDebtorFilter = managerFilter === "debtor";
       const isUnitSelected = unitFilter === "one" && selectedUnitId !== "";
       hasActiveFilter = isDebtorFilter || isUnitSelected;
+      
+      // اگر هیچ فیلتری فعال نیست، فقط برای حالت all بارگذاری نکن (قبلاً بارگذاری شده)
+      if (!hasActiveFilter) return;
     }
 
     if (mode === "vahed") {
@@ -302,16 +362,18 @@ export default function BillsPage() {
       const hasCostPayFilter = detailCostPay !== "all";
       const hasUnitSelected = unitFilter === "one" && selectedUnitId !== "";
       hasActiveFilter = hasDateFilter || hasPersonFilter || hasCostPayFilter || hasUnitSelected;
+      
+      // اگر هیچ فیلتری فعال نیست، بارگذاری نکن
+      if (!hasActiveFilter) return;
     }
 
     if (mode === "sandogh") {
       hasActiveFilter = dateStart !== "" || dateEnd !== "";
+      if (!hasActiveFilter) return;
     }
 
-    if (hasActiveFilter) {
-      void loadBill();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    console.log("🔄 Reloading with filters");
+    void loadBill();
   }, [
     managerFilter,
     unitFilter,
@@ -320,6 +382,11 @@ export default function BillsPage() {
     detailCostPay,
     dateStart,
     dateEnd,
+    buildingId,
+    mode,
+    isManager,
+    selectedUnit?.idv,
+    loadBill,
   ]);
 
   // ============================================
@@ -331,34 +398,30 @@ export default function BillsPage() {
   };
 
   const handleGeneratePDF = () => {
-  // ساخت پارامترهای URL برای صفحه PDF
-  const params = new URLSearchParams();
-  params.set("mode", mode);
-  params.set("buildingId", buildingId);
-  params.set("dateStart", dateStart);
-  params.set("dateEnd", dateEnd);
-  params.set("detailPerson", detailPerson);
-  params.set("detailCostPay", detailCostPay);
-  params.set("managerFilter", managerFilter);
-  params.set("unitFilter", unitFilter);
-  params.set("selectedUnitId", selectedUnitId);
-  
-  // پیدا کردن نام واحد انتخاب شده
-  const selectedUnit = units.find((u) => u.idv === selectedUnitId);
-  if (selectedUnit) {
-    params.set("selectedUnitName", selectedUnit.namev);
-  }
+    const params = new URLSearchParams();
+    params.set("mode", mode);
+    params.set("buildingId", buildingId);
+    params.set("dateStart", dateStart);
+    params.set("dateEnd", dateEnd);
+    params.set("detailPerson", detailPerson);
+    params.set("detailCostPay", detailCostPay);
+    params.set("managerFilter", managerFilter);
+    params.set("unitFilter", unitFilter);
+    params.set("selectedUnitId", selectedUnitId);
 
-  // هدایت به صفحه PDF
-  router.push(`/bills/pdf?${params.toString()}`);
-};
+    const selectedUnit = units.find((u) => u.idv === selectedUnitId);
+    if (selectedUnit) {
+      params.set("selectedUnitName", selectedUnit.namev);
+    }
+
+    router.push(`/bills/pdf?${params.toString()}`);
+  };
 
   // ============================================
   // Render Helpers
   // ============================================
 
-  const hasData =
-    buildingBills.length > 0 || unitBills.length > 0 || fundBills.length > 0;
+  const hasData = buildingBills.length > 0 || unitBills.length > 0 || fundBills.length > 0;
 
   const hasAnyFilter =
     mode === "sakhteman"
@@ -513,11 +576,10 @@ export default function BillsPage() {
                   )}
                 </div>
 
-                {hasAnyFilter && (
-                  <Button onClick={handleApplyFilters} className="w-full">
-                    اعمال فیلتر
-                  </Button>
-                )}
+                {/* دکمه اعمال فیلتر - همیشه نمایش داده میشه */}
+                <Button onClick={handleApplyFilters} className="w-full">
+                  اعمال فیلتر
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -643,11 +705,9 @@ export default function BillsPage() {
                   </div>
                 </div>
 
-                {hasAnyFilter && (
-                  <Button onClick={handleApplyFilters} className="w-full">
-                    اعمال فیلتر
-                  </Button>
-                )}
+                <Button onClick={handleApplyFilters} className="w-full">
+                  اعمال فیلتر
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -678,12 +738,10 @@ export default function BillsPage() {
                     onChange={(e) => setDateEnd(e.target.value)}
                   />
                 </div>
-                {hasAnyFilter && (
-                  <Button onClick={handleApplyFilters} className="sm:col-span-2">
-                    <CalendarDays className="ml-2 h-4 w-4" />
-                    اعمال تاریخ
-                  </Button>
-                )}
+                <Button onClick={handleApplyFilters} className="sm:col-span-2">
+                  <CalendarDays className="ml-2 h-4 w-4" />
+                  اعمال تاریخ
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -750,41 +808,36 @@ export default function BillsPage() {
           )}
 
           {/* ============================================
-              نمایش نتایج - جزئیات با جمع‌ها
+              نمایش نتایج - جزئیات
               ============================================ */}
           {!isLoading && mode === "vahed" && unitBills.length > 0 && (
-            <>
-             
-
-              {/* لیست جزئیات */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>جزئیات صورت حساب</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {unitBills.map((item, index) => (
-                      <div key={`${item.unitId}-${item.title}-${index}`} className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold">{item.title}</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              واحد: {item.unitName}
-                            </p>
-                          </div>
-                          <p className="font-bold">{item.price}</p>
+            <Card>
+              <CardHeader>
+                <CardTitle>جزئیات صورت حساب</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {unitBills.map((item, index) => (
+                    <div key={`${item.unitId}-${item.title}-${index}`} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">{item.title}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            واحد: {item.unitName}
+                          </p>
                         </div>
-                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                          <span>نوع: {item.type}</span>
-                          <span>پرداخت‌کننده: {item.person}</span>
-                          <span>تاریخ: {item.dateFrom}</span>
-                        </div>
+                        <p className="font-bold">{item.price}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
+                      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                        <span>نوع: {item.type}</span>
+                        <span>پرداخت‌کننده: {item.person}</span>
+                        <span>تاریخ: {item.dateFrom}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* ============================================
