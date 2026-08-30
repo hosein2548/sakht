@@ -24,17 +24,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initSession = async () => {
       try {
+        setIsLoading(true);
+        console.log("🔐 SessionProvider: Initializing...");
+        
         const authService = AuthService.getInstance();
-        const user = await authService.checkAuth();
+        const userData = await authService.checkAuth();
 
-        if (user) {
-          setUser(user);
+        if (userData) {
+          console.log("✅ SessionProvider: User found:", userData.iduser);
+          setUser(userData);
           setAuthenticated(true);
-          setAppUser(user);
+          setAppUser(userData);
+        } else {
+          console.log("❌ SessionProvider: No user found");
         }
       } catch (error) {
-        console.error("[SessionProvider] Init error:", error);
+        console.error("❌ SessionProvider: Init error:", error);
       } finally {
+        console.log("🏁 SessionProvider: Loading finished");
         setIsLoading(false);
       }
     };
@@ -49,11 +56,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const refresh = async () => {
     setIsLoading(true);
     try {
-      const user = await AuthService.getInstance().checkAuth();
-      if (user) {
-        setUser(user);
+      const userData = await AuthService.getInstance().checkAuth();
+      if (userData) {
+        setUser(userData);
         setAuthenticated(true);
-        setAppUser(user);
+        setAppUser(userData);
       }
     } finally {
       setIsLoading(false);

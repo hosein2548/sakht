@@ -1,3 +1,4 @@
+// src/app/units/[id]/edit/page.tsx
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -36,10 +37,6 @@ import {
 } from "@/src/features/units/api/unit-detail.api";
 
 import {
-  unitSaveApi,
-} from "@/src/features/units/api/unit-save.api";
-
-import {
   useUnitEditStore,
 } from "@/src/features/units/store/unit-edit.store";
 
@@ -49,15 +46,15 @@ export default function EditUnitPage() {
       id: string;
     }>();
 
-    const selectedBuilding =
-  useBuildingStore(
-    (state) => state.selectedBuilding
-  );
+  const selectedBuilding =
+    useBuildingStore(
+      (state) => state.selectedBuilding
+    );
 
-const selectedUnit =
-  useBuildingStore(
-    (state) => state.selectedUnit
-  );
+  const selectedUnit =
+    useBuildingStore(
+      (state) => state.selectedUnit
+    );
 
   const router =
     useRouter();
@@ -163,8 +160,6 @@ const selectedUnit =
             return;
           }
 
-          //setIds(result.idv ? "" : "");
-
           setNamevahed(
             result.namevahed
           );
@@ -201,11 +196,6 @@ const selectedUnit =
             result.dateFrom
           );
 
-          /*
-           * ids ساختمان از صفحه قبل/Context
-           * در مرحله بعد مستقیم از Building Store
-           * خوانده می‌شود.
-           */
         } catch (error) {
           console.error(
             "Load unit edit error:",
@@ -264,59 +254,35 @@ const selectedUnit =
         setSaveError(null);
         setSaveSuccess(false);
 
-        /*
-         * فعلاً ids ساختمان را از Context
-         * در مرحله بعد مستقیم می‌گیریم.
-         *
-         * برای جلوگیری از ارسال مقدار اشتباه،
-         * خالی بودن آن را کنترل می‌کنیم.
-         */
         const buildingId =
-  selectedBuilding?.ids ??
-  selectedUnit?.ids ??
-  "";
+          selectedBuilding?.ids ??
+          selectedUnit?.ids ??
+          "";
 
-if (!buildingId) {
-  setSaveError(
-    "شناسه ساختمان پیدا نشد."
-  );
+        if (!buildingId) {
+          setSaveError(
+            "شناسه ساختمان پیدا نشد."
+          );
 
-  return;
-}
+          return;
+        }
 
+        // ✅ استفاده از متد update
         const result =
-          await unitSaveApi.save({
-            idv: unitId,
-
-            ids: buildingId,
-
-            namevahed:
-              namevahed.trim(),
-
-            metter:
-              metter.trim(),
-
-            aab:
-              aab.trim() || "0",
-
-            gaz:
-              gaz.trim() || "0",
-
-            bargh:
-              bargh.trim() || "0",
-
-            parking:
-              parking.trim() || "0",
-
-            anbari:
-              anbari.trim() || "0",
-
-            tozihat:
-              tozihat.trim() || "0",
-
-            datefrom:
-              datefrom.trim(),
-          });
+          await unitDetailApi.update(
+            unitId,
+            {
+              namevahed: namevahed.trim(),
+              metter: metter.trim(),
+              aab: aab.trim() || "0",
+              gaz: gaz.trim() || "0",
+              bargh: bargh.trim() || "0",
+              parking: parking.trim() || "0",
+              anbari: anbari.trim() || "0",
+              tozihat: tozihat.trim() || "0",
+              dateFrom: datefrom.trim(),
+            }
+          );
 
         if (!result.success) {
           setSaveError(
@@ -357,11 +323,11 @@ if (!buildingId) {
 
       <div className="flex items-center gap-3">
         <Link
-  href={`/units/${unitId}`}
-  className="flex h-10 w-10 items-center justify-center rounded-md hover:bg-muted"
->
-  <ArrowRight className="h-5 w-5" />
-</Link>
+          href={`/units/${unitId}`}
+          className="flex h-10 w-10 items-center justify-center rounded-md hover:bg-muted"
+        >
+          <ArrowRight className="h-5 w-5" />
+        </Link>
 
         <div>
           <h1 className="text-xl font-bold">

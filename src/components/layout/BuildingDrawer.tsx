@@ -119,7 +119,7 @@ export default function BuildingDrawer({
 
   const handleAddBuilding = () => {
     onOpenChange(false);
-    window.location.href = "/buildings/new";
+  window.location.href = "/buildings/new";
   };
 
   // ✅ تشخیص نقش‌های کاربر در یک واحد خاص

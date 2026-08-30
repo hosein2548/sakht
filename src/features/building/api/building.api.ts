@@ -199,4 +199,192 @@ export const buildingApi = {
       );
     }
   },
+
+  async create(input: CreateBuildingInput): Promise<{ success: boolean; message?: string; buildingId?: string }> {
+    const formData = new FormData();
+    formData.append("name", input.name);
+    formData.append("idcity", input.idcity);
+    formData.append("tozihat", input.tozihat || "");
+    formData.append("iduser", input.userId);
+    formData.append("statephp", "savenewsakhteman");
+
+    if (input.image) {
+      formData.append("image", input.image, "building.jpg");
+    }
+
+    try {
+      const response = await apiClient.post<string>("/sakhteman.php", formData);
+      const raw = String(response.data ?? "");
+      console.log("📤 Create building response:", raw);
+
+      if (raw.startsWith("ok")) {
+        // استخراج شناسه ساختمان از پاسخ
+        const idMatch = raw.match(/ok(.+)/);
+        return {
+          success: true,
+          buildingId: idMatch?.[1] || "",
+          message: "ساختمان با موفقیت ثبت شد.",
+        };
+      }
+
+      if (raw === "notekrari") {
+        return {
+          success: false,
+          message: "این نام ساختمان قبلاً ثبت شده است.",
+        };
+      }
+
+      return {
+        success: false,
+        message: "ثبت ساختمان انجام نشد.",
+      };
+    } catch (error) {
+      console.error("❌ Create building error:", error);
+      return {
+        success: false,
+        message: "ارتباط با سرور برقرار نشد.",
+      };
+    }
+  },
+
+  async getOstanList(): Promise<Ostan[]> {
+    try {
+      const response = await apiClient.post<string>("/sakhteman.php", {
+        statephp: "getostan",
+      });
+
+      const raw = String(response.data ?? "");
+      console.log("📡 getostan response:", raw);
+
+      if (!raw.startsWith("ok")) {
+        return [];
+      }
+
+      const jsonStart = raw.indexOf("[");
+      if (jsonStart === -1) {
+        return [];
+      }
+
+      const data = JSON.parse(raw.substring(jsonStart));
+      if (!Array.isArray(data)) {
+        return [];
+      }
+
+      return data.map((item) => ({
+        id: String(item.id ?? ""),
+        code: String(item.code ?? ""),
+        name: String(item.name ?? ""),
+      }));
+    } catch (error) {
+      console.error("❌ Get ostan error:", error);
+      return [];
+    }
+  },
+
+  // ✅ دریافت لیست شهرها بر اساس کد استان
+  async getCityList(codeOstan: string): Promise<City[]> {
+    try {
+      const response = await apiClient.post<string>("/sakhteman.php", {
+        codeostan: codeOstan,
+        statephp: "getcity",
+      });
+
+      const raw = String(response.data ?? "");
+      console.log("📡 getcity response:", raw);
+
+      if (!raw.startsWith("ok")) {
+        return [];
+      }
+
+      const jsonStart = raw.indexOf("[");
+      if (jsonStart === -1) {
+        return [];
+      }
+
+      const data = JSON.parse(raw.substring(jsonStart));
+      if (!Array.isArray(data)) {
+        return [];
+      }
+
+      return data.map((item) => ({
+        id: String(item.id ?? ""),
+        name: String(item.name ?? ""),
+      }));
+    } catch (error) {
+      console.error("❌ Get city error:", error);
+      return [];
+    }
+  },
+
+  // ✅ ثبت ساختمان جدید (با تصویر)
+  async createBuilding(input: {
+    name: string;
+    idcity: string;
+    codeostan: string;
+    countvahed: string;
+    userId: string;
+    image?: File | null;
+  }): Promise<{ success: boolean; message?: string }> {
+    const formData = new FormData();
+    formData.append("name", input.name);
+    formData.append("iduser", input.userId);
+    formData.append("idcity", input.idcity);
+    formData.append("codeostan", input.codeostan);
+    formData.append("countvahed", input.countvahed);
+    formData.append("statephp", "savenewsakhteman");
+
+    if (input.image) {
+      formData.append("image", input.image, "building.jpg");
+    }
+
+    try {
+      const response = await apiClient.post<string>("/sakhteman.php", formData);
+      const raw = String(response.data ?? "");
+      console.log("📤 savenewsakhteman response:", raw);
+
+      if (raw.startsWith("ok")) {
+        return {
+          success: true,
+          message: "ساختمان با موفقیت ثبت شد.",
+        };
+      }
+
+      if (raw === "notekrari") {
+        return {
+          success: false,
+          message: "این نام ساختمان قبلاً ثبت شده است.",
+        };
+      }
+
+      return {
+        success: false,
+        message: "ثبت ساختمان انجام نشد.",
+      };
+    } catch (error) {
+      console.error("❌ Create building error:", error);
+      return {
+        success: false,
+        message: "ارتباط با سرور برقرار نشد.",
+      };
+    }
+  },
 };
+
+export interface CreateBuildingInput {
+  name: string;
+  idcity: string;
+  tozihat?: string;
+  image?: File | null;
+  userId: string;
+}
+
+export interface Ostan {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface City {
+  id: string;
+  name: string;
+}

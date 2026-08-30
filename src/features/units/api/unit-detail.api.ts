@@ -37,7 +37,6 @@ function parseUnitDetail(raw: string): UnitDetail | null {
 
     const item = data[0];
     
-    // ✅ تشخیص وضعیت واحد از فیلدهای مختلف
     let stateFullEmpty: "full" | "empty" = "empty";
     if (item.fullempty === "full" || item.state === "full" || item.status === "full") {
       stateFullEmpty = "full";
@@ -48,7 +47,6 @@ function parseUnitDetail(raw: string): UnitDetail | null {
     return {
       idvahed: String(item.idv ?? item.idvahed ?? ""),
       namevahed: String(item.namev ?? item.namevahed ?? ""),
-      // ✅ اصلاح: استفاده از `metraj` به جای `metter`
       metter: String(item.metraj ?? item.metter ?? ""),
       bargh: String(item.bargh ?? ""),
       aab: String(item.aab ?? ""),
@@ -82,5 +80,53 @@ export const unitDetailApi = {
     return detail;
   },
 
-  // ... باقی کد update بدون تغییر
+  // ✅ متد به‌روزرسانی واحد
+  async update(
+    unitId: string,
+    data: Partial<UnitDetail>
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await apiClient.post<string>("/vahed.php", {
+        idv: unitId,
+        namevahed: data.namevahed || "",
+        metter: data.metter || "",
+        aab: data.aab || "0",
+        gaz: data.gaz || "0",
+        bargh: data.bargh || "0",
+        parking: data.parking || "0",
+        anbari: data.anbari || "0",
+        tozihat: data.tozihat || "0",
+        datefrom: data.dateFrom || "",
+        statephp: "SaveVahedInfo",
+      });
+
+      const raw = String(response.data ?? "");
+      console.log("📤 SaveVahedInfo response:", raw);
+
+      if (raw.startsWith("ok")) {
+        return {
+          success: true,
+          message: "اطلاعات واحد با موفقیت ذخیره شد.",
+        };
+      }
+
+      if (raw === "no") {
+        return {
+          success: false,
+          message: "خطا در ذخیره اطلاعات.",
+        };
+      }
+
+      return {
+        success: false,
+        message: "ذخیره اطلاعات انجام نشد.",
+      };
+    } catch (error) {
+      console.error("❌ Update unit error:", error);
+      return {
+        success: false,
+        message: "ارتباط با سرور برقرار نشد.",
+      };
+    }
+  },
 };
