@@ -68,7 +68,7 @@ export const buildingApi = {
       const previousManagerBuildings:
         PreviousManagerBuilding[] = [];
 
-      const units: Unit[] = [];
+      const unitsByKey = new Map<string, Unit>();
 
       for (const item of data) {
         /*
@@ -146,56 +146,47 @@ export const buildingApi = {
          * واحدهایی که کاربر مالک یا ساکن آنهاست
          */
         if (
-          String(item?.idmalek ?? "") ===
-            String(iduser) ||
-          String(item?.idsaken ?? "") ===
-            String(iduser)
+          String(item?.idmalek ?? "") === String(iduser) ||
+          String(item?.idsaken ?? "") === String(iduser)
         ) {
-          units.push({
-            idv: String(
-              item?.idv ?? ""
-            ),
-            namev: String(
-              item?.namev ?? ""
-            ),
-            malek: String(
-              item?.idmalek ?? ""
-            ),
-            saken: String(
-              item?.idsaken ?? ""
-            ),
-            idmodir: String(
-              item?.idmodir ?? ""
-            ),
-            namemodir: String(
-              item?.namemodir ?? ""
-            ),
-            ids: String(
-              item?.ids ?? ""
-            ),
-            names: String(
-              item?.names ?? ""
-            ),
-            idcity: String(
-              item?.idcity ?? ""
-            ),
-            namecity: String(
-              item?.namecity ?? ""
-            ),
-            nameostan: String(
-              item?.nameostan ?? ""
-            ),
-            codeostan: String(
-              item?.codeostan ?? ""
-            ),
-          });
+          const unit: Unit = {
+            idv: String(item?.idv ?? ""),
+            namev: String(item?.namev ?? ""),
+            malek: String(item?.idmalek ?? ""),
+            saken: String(item?.idsaken ?? ""),
+            idmodir: String(item?.idmodir ?? ""),
+            namemodir: String(item?.namemodir ?? ""),
+            ids: String(item?.ids ?? ""),
+            names: String(item?.names ?? ""),
+            idcity: String(item?.idcity ?? ""),
+            namecity: String(item?.namecity ?? ""),
+            nameostan: String(item?.nameostan ?? ""),
+            codeostan: String(item?.codeostan ?? ""),
+          };
+
+          // ممکن است API برای یک واحد چند رکورد برگرداند.
+          // واحد را یکی نگه می‌داریم تا نقش مالک/ساکن روی همان رکورد تجمیع شود.
+          const key = `${unit.ids}-${unit.idv}`;
+          const existing = unitsByKey.get(key);
+
+          if (!existing) {
+            unitsByKey.set(key, unit);
+          } else {
+            unitsByKey.set(key, {
+              ...existing,
+              malek: existing.malek || unit.malek,
+              saken: existing.saken || unit.saken,
+              idmodir: existing.idmodir || unit.idmodir,
+              namemodir: existing.namemodir || unit.namemodir,
+            });
+          }
         }
       }
 
       return {
         buildings,
         previousManagerBuildings,
-        units,
+        units: Array.from(unitsByKey.values()),
       };
     } catch (error) {
       console.error(

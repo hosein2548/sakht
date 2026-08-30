@@ -28,6 +28,7 @@ import {
 
 import { useAuthStore } from "@/src/core/store/auth.store";
 import { useAppStore } from "@/src/core/store/app.store";
+import { useRoleStore } from "@/src/features/building/store/role.store";
 
 interface BuildingDrawerProps {
   open: boolean;
@@ -42,7 +43,6 @@ export default function BuildingDrawer({
   // Store
   // ============================================
   const buildings = useBuildingStore((state) => state.buildings);
-  const previousManagerBuildings = useBuildingStore((state) => state.previousManagerBuildings);
   const units = useBuildingStore((state) => state.units);
   const selectedBuilding = useBuildingStore((state) => state.selectedBuilding);
   const selectedUnit = useBuildingStore((state) => state.selectedUnit);
@@ -51,6 +51,7 @@ export default function BuildingDrawer({
 
   const { user } = useAuthStore();
   const appUser = useAppStore((state) => state.user);
+  const { currentRole, hasBothRoles, setCurrentRole } = useRoleStore();
 
   // ============================================
   // Computed
@@ -58,60 +59,68 @@ export default function BuildingDrawer({
   const currentUser = user || appUser;
   const userId = currentUser?.iduser;
 
-  // ✅ استخراج selectedBuildingId برای حل مشکل React Compiler
-  const selectedBuildingId = useMemo(
-    () => selectedBuilding?.ids,
-    [selectedBuilding?.ids]
+
+  // فقط ساختمان‌هایی که خود کاربر مدیر آنهاست.
+  const managedBuildings = useMemo(() => {
+    const seen = new Set<string>();
+    return buildings.filter((building) => {
+      if (!building.ids || seen.has(building.ids)) return false;
+      seen.add(building.ids);
+      return true;
+    });
+  }, [buildings]);
+
+  // همه واحدهای مرتبط با کاربر، مستقل از اینکه ساختمانشان تحت مدیریت کاربر هست یا نه.
+  const unitItems = useMemo(() => {
+    const seen = new Set<string>();
+    return units.filter((unit) => {
+      const key = `${unit.ids}-${unit.idv}`;
+      if (!unit.ids || !unit.idv || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [units]);
+
+  // واحدها بر اساس نقش کاربر، کاملاً جدا از ساختمان‌های تحت مدیریت.
+  const ownerUnits = useMemo(
+    () => unitItems.filter((unit) => unit.malek === userId),
+    [unitItems, userId]
   );
 
-  // ✅ ساختمان‌های تحت مدیریت
-  const managedBuildings = useMemo(() => buildings, [buildings]);
+  const residentUnits = useMemo(
+    () => unitItems.filter((unit) => unit.saken === userId),
+    [unitItems, userId]
+  );
 
-  // ✅ ساختمان‌های مرتبط با واحدها (مالک/ساکن)
-  const relatedBuildings = useMemo(() => previousManagerBuildings, [previousManagerBuildings]);
-
-  // ✅ همه ساختمان‌های مرتبط (مدیریت + مالک/ساکن)
-  const allBuildings = useMemo(() => {
-    const all = [...managedBuildings];
-    for (const item of relatedBuildings) {
-      if (!all.some((b) => b.ids === item.ids)) {
-        all.push({
-          ...item,
-        });
-      }
-    }
-    return all;
-  }, [managedBuildings, relatedBuildings]);
-
-  // ✅ واحدهای مرتبط با کاربر (بر اساس ساختمان انتخاب شده یا همه)
-  const unitItems = useMemo(() => {
-    if (selectedBuildingId) {
-      return units.filter((unit) => unit.ids === selectedBuildingId);
-    }
-    return units;
-  }, [units, selectedBuildingId]);
+  const allBuildingsCount = managedBuildings.length;
 
   // ============================================
   // Handlers
   // ============================================
-  const handleSelectBuilding = (building: (typeof allBuildings)[number]) => {
+  const handleSelectBuilding = (building: (typeof managedBuildings)[number]) => {
     selectBuilding(building);
     onOpenChange(false);
   };
 
-  const handleSelectUnit = (unit: (typeof units)[number]) => {
+  const handleSelectUnit = (
+    unit: (typeof units)[number],
+    role: "malek" | "saken"
+  ) => {
     selectUnit(unit);
+    // نقش گروه انتخاب‌شده باید همان نقش فعال شود؛ مخصوصاً وقتی
+    // کاربر در یک واحد هم مالک است و هم ساکن.
+    setCurrentRole(role);
     onOpenChange(false);
+  };
+
+  const handleSwitchRole = (role: "malek" | "saken") => {
+    setCurrentRole(role);
   };
 
   const handleAddBuilding = () => {
     onOpenChange(false);
     window.location.href = "/buildings/new";
   };
-
-  // ============================================
-  // ✅ Helper Functions (اصلاح شده)
-  // ============================================
 
   // ✅ تشخیص نقش‌های کاربر در یک واحد خاص
   const getUserRolesInUnit = (unit: (typeof units)[number]) => {
@@ -194,6 +203,52 @@ export default function BuildingDrawer({
 
         <div className="h-[calc(100vh-5rem)] overflow-y-auto">
           {/* ================================================= */}
+          {/* انتخاب نقش (فقط در صورتی که کاربر هم مالک و هم ساکن باشد) */}
+          {/* ================================================= */}
+          {selectedUnit && hasBothRoles && currentUser && (
+            <section className="border-b bg-muted/30 p-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">
+                  انتخاب نقش در واحد {selectedUnit.namev}:
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchRole("malek")}
+                    className={[
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition",
+                      currentRole === "malek"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted",
+                    ].join(" ")}
+                  >
+                    <User className="h-4 w-4" />
+                    مالک
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchRole("saken")}
+                    className={[
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition",
+                      currentRole === "saken"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-muted",
+                    ].join(" ")}
+                  >
+                    <Users className="h-4 w-4" />
+                    ساکن
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {currentRole === "malek" && "✅ در حال نمایش اطلاعات با نقش مالک"}
+                  {currentRole === "saken" && "✅ در حال نمایش اطلاعات با نقش ساکن"}
+                  {!currentRole && "⚠️ لطفاً نقش خود را انتخاب کنید"}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {/* ================================================= */}
           {/* ساختمان‌های تحت مدیریت                         */}
           {/* ================================================= */}
           {managedBuildings.length > 0 && (
@@ -251,57 +306,9 @@ export default function BuildingDrawer({
           )}
 
           {/* ================================================= */}
-          {/* ساختمان‌های دارای واحد (مالک/ساکن)              */}
-          {/* ================================================= */}
-          {relatedBuildings.length > 0 && (
-            <section className="border-b p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <h2 className="text-sm font-bold">ساختمان‌های دارای واحد</h2>
-                <span className="text-xs text-muted-foreground">
-                  ({relatedBuildings.length})
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {relatedBuildings.map((building) => {
-                  const isSelected = selectedBuilding?.ids === building.ids;
-                  const buildingUnits = units.filter((u) => u.ids === building.ids);
-                  
-                  return (
-                    <button
-                      key={building.ids}
-                      type="button"
-                      onClick={() => handleSelectBuilding(building)}
-                      className={[
-                        "flex w-full items-center gap-3 rounded-xl border p-4 text-right transition",
-                        isSelected
-                          ? "border-primary bg-primary/10"
-                          : "hover:bg-muted",
-                      ].join(" ")}
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Building2 className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">{building.names}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {buildingUnits.length} واحد
-                        </p>
-                      </div>
-                      {isSelected && (
-                        <Check className="h-5 w-5 shrink-0 text-primary" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* ================================================= */}
           {/* اگر هیچ ساختمانی وجود نداشته باشد               */}
           {/* ================================================= */}
-          {allBuildings.length === 0 && (
+          {allBuildingsCount === 0 && (
             <section className="p-4">
               <div className="rounded-xl border border-dashed p-8 text-center">
                 <Building2 className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
@@ -320,82 +327,139 @@ export default function BuildingDrawer({
           {/* ================================================= */}
           {/* جداکننده                                        */}
           {/* ================================================= */}
-          {allBuildings.length > 0 && unitItems.length > 0 && (
+          {allBuildingsCount > 0 && unitItems.length > 0 && (
             <div className="border-t" />
           )}
 
           {/* ================================================= */}
-          {/* واحدها                                           */}
+          {/* واحدهای مرتبط با کاربر                            */}
           {/* ================================================= */}
           {unitItems.length > 0 && (
             <section className="p-4">
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-4 flex items-center gap-2">
                 <Home className="h-5 w-5" />
                 <div>
-                  <h2 className="text-sm font-bold">واحدهای من</h2>
+                  <h2 className="text-sm font-bold">واحدهای مرتبط با من</h2>
                   <p className="text-xs text-muted-foreground">
-                    {unitItems.length} واحد
-                    {selectedBuilding && ` در ${selectedBuilding.names}`}
+                    {unitItems.length} واحد در تمام ساختمان‌ها
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {unitItems.map((unit) => {
-                  const isSelected = selectedUnit?.idv === unit.idv;
-                  const roleBadges = getUnitRoleBadges(unit);
-                  const roleText = getUnitRoleText(unit);
-                  
-                  // ✅ چک کردن اینکه آیا کاربر در این واحد هر دو نقش رو داره
-                  const { isMalek, isSaken } = getUserRolesInUnit(unit);
-                  const hasBoth = isMalek && isSaken;
+              {ownerUnits.length > 0 && (
+                <div className="mb-5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <User className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-xs font-bold">واحدهای تحت مالکیت من</h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      ({ownerUnits.length})
+                    </span>
+                  </div>
 
-                  return (
-                    <button
-                      key={`${unit.ids}-${unit.idv}`}
-                      type="button"
-                      onClick={() => handleSelectUnit(unit)}
-                      className={[
-                        "flex w-full items-center gap-3 rounded-xl border p-4 text-right transition",
-                        isSelected
-                          ? "border-primary bg-primary/10"
-                          : "hover:bg-muted",
-                      ].join(" ")}
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Home className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-muted-foreground">
-                          ساختمان: {unit.names}
-                        </p>
-                        <p className="mt-1 truncate font-semibold">
-                          واحد {unit.namev}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                          {/* ✅ نمایش بدج‌های نقش */}
-                          {roleBadges}
-                          {hasBoth && (
-                            <span className="text-[10px] text-muted-foreground">
-                              (هر دو نقش)
+                  <div className="space-y-2">
+                    {ownerUnits.map((unit) => {
+                      const isSelected =
+                        selectedUnit?.ids === unit.ids &&
+                        selectedUnit?.idv === unit.idv &&
+                        currentRole === "malek";
+
+                      return (
+                        <button
+                          key={`owner-${unit.ids}-${unit.idv}`}
+                          type="button"
+                          onClick={() => handleSelectUnit(unit, "malek")}
+                          className={[
+                            "flex w-full items-center gap-3 rounded-xl border p-4 text-right transition",
+                            isSelected
+                              ? "border-primary bg-primary/10"
+                              : "hover:bg-muted",
+                          ].join(" ")}
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <Home className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-muted-foreground">
+                              ساختمان: {unit.names}
+                            </p>
+                            <p className="mt-1 truncate font-semibold">
+                              واحد {unit.namev}
+                            </p>
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              <User className="h-2.5 w-2.5" />
+                              مالک
                             </span>
+                          </div>
+                          {isSelected && (
+                            <Check className="h-5 w-5 shrink-0 text-primary" />
                           )}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <Check className="h-5 w-5 shrink-0 text-primary" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {residentUnits.length > 0 && (
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-success" />
+                    <h3 className="text-xs font-bold">واحدهای محل سکونت من</h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      ({residentUnits.length})
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {residentUnits.map((unit) => {
+                      const isSelected =
+                        selectedUnit?.ids === unit.ids &&
+                        selectedUnit?.idv === unit.idv &&
+                        currentRole === "saken";
+
+                      return (
+                        <button
+                          key={`resident-${unit.ids}-${unit.idv}`}
+                          type="button"
+                          onClick={() => handleSelectUnit(unit, "saken")}
+                          className={[
+                            "flex w-full items-center gap-3 rounded-xl border p-4 text-right transition",
+                            isSelected
+                              ? "border-primary bg-primary/10"
+                              : "hover:bg-muted",
+                          ].join(" ")}
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <Home className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-muted-foreground">
+                              ساختمان: {unit.names}
+                            </p>
+                            <p className="mt-1 truncate font-semibold">
+                              واحد {unit.namev}
+                            </p>
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
+                              <Users className="h-2.5 w-2.5" />
+                              ساکن
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <Check className="h-5 w-5 shrink-0 text-primary" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
           {/* ================================================= */}
           {/* اگر هیچ واحدی وجود نداشته باشد                   */}
           {/* ================================================= */}
-          {allBuildings.length > 0 && unitItems.length === 0 && (
+          {allBuildingsCount > 0 && unitItems.length === 0 && (
             <section className="p-4">
               <div className="rounded-xl border border-dashed p-6 text-center">
                 <Home className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
