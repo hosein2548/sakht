@@ -33,3 +33,14 @@ export interface UnitPerson {
 
   count: string;
 }
+export interface Resident {
+  idnaghsh: string;
+  iduser: string;
+  nameuser: string;
+  phone: string;
+  datestart: string;
+  count: string;
+  naghsh: 'مالک' | 'ساکن' | string;
+  status?: 'active' | 'ended' | 'pending';
+  endDate?: string;
+}

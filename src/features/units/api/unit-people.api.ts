@@ -136,11 +136,12 @@ export const unitPeopleApi = {
   // دریافت لیست مالک و ساکنان
   // ============================================
 
-  async getByUnit(unitId: string): Promise<Resident[]> {
+  async getByUnit(unitId: string , stateactive:string): Promise<Resident[]> {
     try {
       const response = await apiClient.post<string>("/vahed.php", {
         idv: unitId,
         statephp: "getmaleksaken",
+        stateactive:stateactive
       });
 
       const raw = String(response.data ?? "");
@@ -457,8 +458,8 @@ export const unitPeopleApi = {
   // Backward-compatible facade
   // ============================================
 
-  async getAll(unitId: string): Promise<Resident[]> {
-    return this.getByUnit(unitId);
+  async getAll(unitId: string, stateactive:string): Promise<Resident[]> {
+    return this.getByUnit(unitId,stateactive);
   },
 
   async add(

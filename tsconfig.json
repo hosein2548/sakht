@@ -1,4 +1,5 @@
 {
+  
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -12,6 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
+      "jsxImportSource": "react",
     "incremental": true,
     "plugins": [
       {
@@ -31,4 +33,8 @@
     "**/*.mts"
   ],
   "exclude": ["node_modules"]
+
+
 }
+
+

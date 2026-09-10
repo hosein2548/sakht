@@ -165,17 +165,17 @@ function HistoryContent() {
   };
 
   const formatDate = (date: string) => {
-    if (!date || date === "1450/01/01") return "تا کنون";
+    if (!date || date === "1490/01/01") return "تا کنون";
     return date;
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === "active") {
+    if (status === "active" ) {
       return (
         <Badge className="bg-success/100 hover:bg-success/90 text-white">فعال</Badge>
       );
     }
-    return <Badge variant="secondary">پایان یافته</Badge>;
+    else return <Badge variant="secondary">پایان یافته</Badge>;
   };
 
   return (

@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
-
+import React from "react";
 import {
   Building2,
   Check,
@@ -150,8 +150,8 @@ export default function BuildingDrawer({
   const getUnitRoleBadges = (unit: (typeof units)[number]) => {
     const { isMalek, isSaken, isModir } = getUserRolesInUnit(unit);
 
-    const badges: JSX.Element[] = [];
-
+    //const badges: JSX.Element[] = [];
+    const badges: React.ReactElement[] = [];
     if (isModir) {
       badges.push(
         <span key="modir" className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">

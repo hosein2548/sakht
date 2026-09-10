@@ -53,7 +53,7 @@ import {
 } from "@/src/features/units/api/unit-detail.api";
 
 import {
-  unitPeopleApi,
+  
   getTodayPersian,
   isValidPersianDate,
 } from "@/src/features/units/api/unit-people.api";
@@ -115,6 +115,8 @@ import {
   Skeleton,
 } from "@/components/ui/skeleton";
 
+ import type { Resident } from "@/src/features/units/types/unit-detail.types";
+ import { unitPeopleApi } from "@/src/features/units/api/unit-people.api";
 // ============================================
 // Types
 // ============================================
@@ -133,17 +135,17 @@ interface UnitDetail {
   dateFrom: string;
 }
 
-interface Resident {
-  idnaghsh: string;
-  iduser: string;
-  nameuser: string;
-  phone: string;
-  datestart: string;
-  count: string;
-  naghsh: 'malek' | 'saken';
-  status?: 'active' | 'ended';
-  endDate?: string;
-}
+// interface Resident {
+//   idnaghsh: string;
+//   iduser: string;
+//   nameuser: string;
+//   phone: string;
+//   datestart: string;
+//   count: string;
+//   naghsh: 'malek' | 'saken';
+//   status?: 'active' | 'ended';
+//   endDate?: string;
+// }
 
 // ============================================
 // Dialog Types for Tenant Edit
@@ -171,6 +173,7 @@ export default function UnitDetailPage() {
   const router = useRouter();
   const params = useParams();
   const unitId = params?.id as string;
+  const stateacive="1";
 
   // Store
   const user = useAppStore((state) => state.user);
@@ -216,6 +219,24 @@ export default function UnitDetailPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+   const loadUnitDetail = useCallback(async () => {
+    if (!unitId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await unitDetailApi.getOne(unitId);
+      setUnitDetail(result);
+      setEditData(result);
+    } catch (err) {
+      console.error("Load unit detail error:", err);
+      setError("دریافت اطلاعات واحد با خطا مواجه شد.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [unitId]);
+  
   // State - Edit Tenant (ساکن)
   const [editTenantDialog, setEditTenantDialog] = useState<EditTenantData>({
     type: null,
@@ -252,96 +273,94 @@ export default function UnitDetailPage() {
   // Load Data
   // ============================================
 
-  const loadUnitDetail = useCallback(async () => {
-    if (!unitId) return;
+ 
+ const loadHistory = useCallback(async (
+  ownersList: Resident[], 
+  tenantsList: Resident[]
+) => {
+  if (!unitId) return;
 
-    setIsLoading(true);
-    setError(null);
+  setIsLoadingHistory(true);
 
-    try {
-      const result = await unitDetailApi.getOne(unitId);
-      setUnitDetail(result);
-      setEditData(result);
-    } catch (err) {
-      console.error("Load unit detail error:", err);
-      setError("دریافت اطلاعات واحد با خطا مواجه شد.");
-    } finally {
-      setIsLoading(false);
+  try {
+    if (ownersList.length > 0) {
+      const ownerHistoryData = await unitHistoryApi.getHistory({
+        unitId,
+        userId: ownersList[0]?.iduser || "",
+      });
+      
+      // ✅ اصلاح mapping با type assertion
+      setOwnerHistory(ownerHistoryData.map((item) => ({
+        ...item,
+        iduser: ownersList[0]?.iduser || "",
+        nameuser: ownersList[0]?.nameuser || "مالک",
+        phone: ownersList[0]?.phone || "",
+        naghsh: 'مالک' as const,
+        datestart: item.startDate,
+        count: item.count,
+        status: item.status,
+        endDate: item.endDate,
+      })));
     }
-  }, [unitId]);
+
+    if (tenantsList.length > 0) {
+      const tenantHistoryData = await unitHistoryApi.getHistory({
+        unitId,
+        userId: tenantsList[0]?.iduser || "",
+      });
+      
+      // ✅ اصلاح mapping با type assertion
+      setTenantHistory(tenantHistoryData.map((item) => ({
+        ...item,
+        iduser: tenantsList[0]?.iduser || "",
+        nameuser: tenantsList[0]?.nameuser || "ساکن",
+        phone: tenantsList[0]?.phone || "",
+        naghsh: 'ساکن' as const,
+        datestart: item.startDate,
+        count: item.count,
+        status: item.status,
+        endDate: item.endDate,
+      })));
+    }
+  } catch (error) {
+    console.error("Load history error:", error);
+  } finally {
+    setIsLoadingHistory(false);
+  }
+}, [unitId]);
 
   const loadPeople = useCallback(async () => {
-    if (!unitId) return;
+  if (!unitId) return;
 
-    setIsLoadingPeople(true);
-    setPeopleError(null);
+  setIsLoadingPeople(true);
+  setPeopleError(null);
 
-    try {
-      const result = await unitPeopleApi.getByUnit(unitId);
-      const ownersList = result.filter((p) => p.naghsh === 'مالک');
-      const tenantsList = result.filter((p) => p.naghsh === 'ساکن');
-      setOwners(ownersList);
-      setTenants(tenantsList);
+  try {
+    const result = await unitPeopleApi.getByUnit(unitId,stateacive);
+    
+    // ✅ استفاده از filter با type assertion
+    const ownersList = result.filter((p): p is Resident & { naghsh: 'مالک' } => 
+      p.naghsh === 'مالک'
+    );
+    const tenantsList = result.filter((p): p is Resident & { naghsh: 'ساکن' } => 
+      p.naghsh === 'ساکن'
+    );
+    
+    setOwners(ownersList);
+    setTenants(tenantsList);
 
-      // بعد از دریافت مالک و ساکن، سوابق رو هم بارگذاری کن
-      if (ownersList.length > 0 || tenantsList.length > 0) {
-        await loadHistory(ownersList, tenantsList);
-      }
-    } catch (err) {
-      console.error("Load people error:", err);
-      setPeopleError("دریافت اطلاعات ساکنان با خطا مواجه شد.");
-    } finally {
-      setIsLoadingPeople(false);
+    if (ownersList.length > 0 || tenantsList.length > 0) {
+      await loadHistory(ownersList, tenantsList);
     }
-  }, [unitId]);
+  } catch (err) {
+    console.error("Load people error:", err);
+    setPeopleError("دریافت اطلاعات ساکنان با خطا مواجه شد.");
+  } finally {
+    setIsLoadingPeople(false);
+  }
+}, [unitId, loadHistory]);
 
-  const loadHistory = useCallback(async (ownersList: Resident[], tenantsList: Resident[]) => {
-    if (!unitId) return;
-
-    setIsLoadingHistory(true);
-
-    try {
-      // دریافت سوابق مالک
-      if (ownersList.length > 0) {
-        const ownerHistoryData = await unitHistoryApi.getHistory({
-          unitId,
-          userId: ownersList[0]?.iduser || "",
-        });
-        setOwnerHistory(ownerHistoryData.map((item) => ({
-          ...item,
-          naghsh: 'malek' as const,
-          nameuser: ownersList[0]?.nameuser || "مالک",
-          phone: ownersList[0]?.phone || "",
-          datestart: item.startDate,
-          count: item.count,
-          status: item.status,
-          endDate: item.endDate,
-        })));
-      }
-
-      // دریافت سوابق ساکن
-      if (tenantsList.length > 0) {
-        const tenantHistoryData = await unitHistoryApi.getHistory({
-          unitId,
-          userId: tenantsList[0]?.iduser || "",
-        });
-        setTenantHistory(tenantHistoryData.map((item) => ({
-          ...item,
-          naghsh: 'saken' as const,
-          nameuser: tenantsList[0]?.nameuser || "ساکن",
-          phone: tenantsList[0]?.phone || "",
-          datestart: item.startDate,
-          count: item.count,
-          status: item.status,
-          endDate: item.endDate,
-        })));
-      }
-    } catch (error) {
-      console.error("Load history error:", error);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, [unitId]);
+ 
 
   useEffect(() => {
     if (unitId) {

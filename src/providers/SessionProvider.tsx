@@ -5,9 +5,10 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { AuthService } from "@/src/core/auth/auth.service";
 import { useAuthStore } from "@/src/core/store/auth.store";
 import { useAppStore } from "@/src/core/store/app.store";
+import type { AuthUser } from "@/src/core/store/auth.store";
 
 interface SessionContextType {
-  user: ReturnType<typeof useAuthStore>["user"];
+  user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   logout: () => Promise<void>;
@@ -18,6 +19,8 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
+  
+  // ✅ اصلاح: استفاده از type annotation
   const { user, isAuthenticated, setUser, setAuthenticated } = useAuthStore();
   const { setUser: setAppUser } = useAppStore();
 
@@ -67,16 +70,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const contextValue: SessionContextType = {
+    user: user || null,
+    isAuthenticated,
+    isLoading,
+    logout,
+    refresh,
+  };
+
   return (
-    <SessionContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isLoading,
-        logout,
-        refresh,
-      }}
-    >
+    <SessionContext.Provider value={contextValue}>
       {children}
     </SessionContext.Provider>
   );

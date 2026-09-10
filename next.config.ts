@@ -5,3 +5,14 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+
+module.exports = {
+
+ images:{
+   domains:[
+     "web120.ir"
+   ]
+ }
+
+}

@@ -1,31 +1,42 @@
-// src/app/page.tsx
 "use client";
 
 import { useEffect } from "react";
+
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/src/core/store/auth.store";
+
+import { useSession } from "@/src/providers";
+
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+
+  const {
+    isAuthenticated,
+    isLoading,
+  } = useSession();
+
 
   useEffect(() => {
-    if (!isLoading) {
-      if (isAuthenticated) {
-        router.replace("/dashboard");
-      } else {
-        router.replace("/login");
-      }
+    if (isLoading) {
+      return;
     }
-  }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
+    if (isAuthenticated) {
+      router.replace("/dashboard");
+    } else {
+      router.replace("/login");
+    }
 
-  return null;
+  }, [
+    isAuthenticated,
+    isLoading,
+    router,
+  ]);
+
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    </div>
+  );
 }

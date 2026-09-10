@@ -105,6 +105,12 @@ export default function ManagementPage() {
       manager: null,
     });
 
+  const [confirmUnknownUser, setConfirmUnknownUser] =
+  useState(false);
+
+  const [pendingPhone, setPendingPhone] =
+  useState("");
+
   const [phone, setPhone] =
     useState("");
 
@@ -259,16 +265,25 @@ export default function ManagementPage() {
           return;
         }
 
-        if (
-          check ===
-          "nouser"
-        ) {
-          setMessage(
-            "این شماره تا این لحظه ثبت‌نام نکرده است."
-          );
+       if (
+  check === "nouser"
+) {
 
-          return;
-        }
+  setPendingPhone(
+    phone.trim()
+  );
+
+
+  setConfirmUnknownUser(true);
+
+
+  setMessage(
+    "این شماره تا الان ثبت‌نام نکرده است. آیا از ثبت این شماره مطمئن هستید؟"
+  );
+
+
+  return;
+}
 
         setCheckingPhone(
           false
@@ -313,6 +328,72 @@ export default function ManagementPage() {
       }
     };
 
+    const handleConfirmUnknownUser =
+  async () => {
+
+    if (
+      !user?.iduser ||
+      !buildingId ||
+      !pendingPhone
+    ) {
+      return;
+    }
+
+
+    try {
+
+      setSaving(true);
+
+
+      const result =
+        await managerApi.addManager(
+          buildingId,
+          user.iduser,
+          pendingPhone
+        );
+
+
+      if (!result.success) {
+
+        setMessage(
+          result.message ??
+          "ثبت مدیر انجام نشد."
+        );
+
+        return;
+      }
+
+
+      setConfirmUnknownUser(false);
+
+      setPendingPhone("");
+
+      closeDialog();
+
+
+      await loadManagers();
+
+
+    } catch(error){
+
+      console.error(
+        "Confirm manager error:",
+        error
+      );
+
+
+      setMessage(
+        "ثبت مدیر با خطا مواجه شد."
+      );
+
+
+    } finally {
+
+      setSaving(false);
+
+    }
+
+};
   /*
    * حذف مدیر
    */
@@ -711,4 +792,6 @@ export default function ManagementPage() {
       )}
     </div>
   );
+
+  
 }

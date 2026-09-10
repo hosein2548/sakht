@@ -1,5 +1,7 @@
+// src/app/bills/pdf/page.tsx
 "use client";
 
+import { Suspense } from "react";
 import {
   useEffect,
   useState,
@@ -46,7 +48,10 @@ import {
 
 import Link from "next/link";
 
-export default function BillsPDFPage() {
+// ============================================
+// ✅ کامپوننت محتوای اصلی که useSearchParams رو استفاده می‌کنه
+// ============================================
+function BillsPDFContent() {
   const searchParams = useSearchParams();
 
   // دریافت پارامترها از URL
@@ -241,5 +246,25 @@ export default function BillsPDFPage() {
         </PDFViewer>
       </div>
     </div>
+  );
+}
+
+// ============================================
+// ✅ صفحه اصلی با Suspense
+// ============================================
+export default function BillsPDFPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+            <p className="mt-4 text-muted-foreground">در حال بارگذاری...</p>
+          </div>
+        </div>
+      }
+    >
+      <BillsPDFContent />
+    </Suspense>
   );
 }

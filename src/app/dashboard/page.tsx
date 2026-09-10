@@ -185,7 +185,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (buildings.length > 0 || units.length > 0) return;
+    if (buildings.length > 0 || units.length > 0) return
+    ;
 
     void initializeUserContext(user).catch((bootstrapError) => {
       console.error("Dashboard bootstrap error:", bootstrapError);

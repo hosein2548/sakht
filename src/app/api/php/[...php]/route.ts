@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const PHP_BASE_URL =
-  "https://web120.ir/apartment/app_ver1";
+  "https://web120.ir/apartment/next";
 
 type RouteContext = {
   params: Promise<{

@@ -16,7 +16,7 @@ function mapHistoryItem(item: Record<string, unknown>): ResidentHistory {
   const endDate = String(item.enddate ?? item.endDate ?? "");
 
   // در فلاتر: اگر enddate === "1450/01/01" باشه، یعنی تا کنون
-  const isActive = endDate === "1450/01/01" || endDate === "" || endDate === "0";
+  const isActive = endDate === "1490/01/01" || endDate === "" || endDate === "0";
 
   return {
     idvahed: String(item.idvahed ?? item.idv ?? ""),

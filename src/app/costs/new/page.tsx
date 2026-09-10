@@ -50,7 +50,7 @@ import {
 
 import {
   Textarea,
-} from "@/src/components/ui/textarea";
+} from "@/components/ui/textarea";
 
 import {
   Button,

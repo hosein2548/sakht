@@ -74,7 +74,9 @@ export default function LoginPage() {
   };
 
   return (
+    
     <div dir="rtl" className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-background px-4 py-12">
+      
       <Card className="w-full max-w-md border-0 shadow-xl">
         <CardHeader className="space-y-2 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">

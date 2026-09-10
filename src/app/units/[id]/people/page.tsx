@@ -47,6 +47,7 @@ import {
 import type {
   UnitPerson,
 } from "@/src/features/units/types/unit-detail.types";
+import { string } from "zod";
 
 type PersonRole =
   | "malek"
@@ -70,9 +71,11 @@ export default function UnitPeoplePage() {
     useParams<{
       id: string;
     }>();
-
+  
   const unitId =
     params.id;
+
+   const stateacive="1";
 
   const user =
     useAppStore(
@@ -96,10 +99,7 @@ export default function UnitPeoplePage() {
       (state) => state.people
     );
 
-  const setPeople =
-    useUnitDetailStore(
-      (state) => state.setPeople
-    );
+  const setPeople = useUnitDetailStore((state) => state.setPeople);
 
   const isLoadingPeople =
     useUnitDetailStore(
@@ -183,36 +183,36 @@ export default function UnitPeoplePage() {
    * ----------------------------------------------------
    */
 
-  const loadPeople =
-    async () => {
-      if (!unitId) {
-        return;
-      }
+  const loadPeople = async () => {
+  if (!unitId) return;
 
-      try {
-        setLoadingPeople(true);
+  try {
+    setLoadingPeople(true);
+    setPeopleError(null);
+    
 
-        setPeopleError(null);
-
-        const result =
-          await unitPeopleApi.getAll(
-            unitId
-          );
-
-        setPeople(result);
-      } catch (error) {
-        console.error(
-          "People loading error:",
-          error
-        );
-
-        setPeopleError(
-          "دریافت اطلاعات مالک و ساکن با خطا مواجه شد."
-        );
-      } finally {
-        setLoadingPeople(false);
-      }
-    };
+    const result = await unitPeopleApi.getAll(unitId,stateacive);
+    
+    // ✅ تبدیل Resident[] به UnitPerson[]
+    const converted: UnitPerson[] = result.map((item) => ({
+      idvahed: unitId,
+      iduser: item.iduser,
+      idnaghsh: item.idnaghsh,
+      nameuser: item.nameuser,
+      phone: item.phone,
+      datestart: item.datestart,
+      count: item.count,
+      naghsh: item.naghsh,
+    }));
+    
+    setPeople(converted);
+  } catch (error) {
+    console.error("People loading error:", error);
+    setPeopleError("دریافت اطلاعات مالک و ساکن با خطا مواجه شد.");
+  } finally {
+    setLoadingPeople(false);
+  }
+};
 
   useEffect(() => {
     void loadPeople();
