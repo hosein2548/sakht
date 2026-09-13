@@ -11,7 +11,7 @@ import {
   useRouter,
   useParams,
 } from "next/navigation";
-
+import { PersianDateInput } from "@/components/ui/persian-date-input";
 import Link from "next/link";
 
 import {
@@ -53,10 +53,9 @@ import {
 } from "@/src/features/units/api/unit-detail.api";
 
 import {
-  
   getTodayPersian,
   isValidPersianDate,
-} from "@/src/features/units/api/unit-people.api";
+} from "@/src/shared/date/persian";
 
 import {
   unitHistoryApi,
@@ -467,17 +466,17 @@ export default function UnitDetailPage() {
           phone: phone,
         });
       } else if (type === 'date') {
-        if (!date || date.length !== 10) {
-          setEditTenantError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-          setIsEditingTenant(false);
-          return;
-        }
+        // if (!date || date.length !== 10) {
+        //   setEditTenantError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
+        //   setIsEditingTenant(false);
+        //   return;
+        // }
 
-        if (!isValidPersianDate(date)) {
-          setEditTenantError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-          setIsEditingTenant(false);
-          return;
-        }
+        // if (!isValidPersianDate(date)) {
+        //   setEditTenantError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
+        //   setIsEditingTenant(false);
+        //   return;
+        // }
 
         result = await unitPeopleApi.editTenantDate({
           idnaghsh: tenant.idnaghsh,
@@ -574,17 +573,17 @@ export default function UnitDetailPage() {
           phone: phone,
         });
       } else if (type === 'date') {
-        if (!date || date.length !== 10) {
-          setEditOwnerError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-          setIsEditingOwner(false);
-          return;
-        }
+        // if (!date || date.length !== 10) {
+        //   setEditOwnerError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
+        //   setIsEditingOwner(false);
+        //   return;
+        // }
 
-        if (!isValidPersianDate(date)) {
-          setEditOwnerError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-          setIsEditingOwner(false);
-          return;
-        }
+        // if (!isValidPersianDate(date)) {
+        //   setEditOwnerError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
+        //   setIsEditingOwner(false);
+        //   return;
+        // }
 
         result = await unitPeopleApi.editOwnerDate({
           idnaghsh: owner.idnaghsh,
@@ -626,15 +625,15 @@ export default function UnitDetailPage() {
   const handleDeletePerson = async () => {
     if (!deleteItem) return;
 
-    if (!deleteDate || deleteDate.length !== 10) {
-      setDeleteError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/15)");
-      return;
-    }
+    // if (!deleteDate || deleteDate.length !== 10) {
+    //   setDeleteError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/15)");
+    //   return;
+    // }
 
-    if (!isValidPersianDate(deleteDate)) {
-      setDeleteError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-      return;
-    }
+    // if (!isValidPersianDate(deleteDate)) {
+    //   setDeleteError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
+    //   return;
+    // }
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -680,15 +679,15 @@ export default function UnitDetailPage() {
       return;
     }
 
-    if (!addDate || addDate.length !== 10) {
-      setAddError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-      return;
-    }
+    // if (!addDate || addDate.length !== 10) {
+    //   setAddError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
+    //   return;
+    // }
 
-    if (!isValidPersianDate(addDate)) {
-      setAddError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-      return;
-    }
+    // if (!isValidPersianDate(addDate)) {
+    //   setAddError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
+    //   return;
+    // }
 
     if (addPersonType === 'saken' && !addCount) {
       setAddError("تعداد نفرات را وارد کنید.");
@@ -1432,21 +1431,18 @@ export default function UnitDetailPage() {
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="deleteDate">تاریخ پایان (شمسی)</Label>
-              <Input
-                id="deleteDate"
-                dir="ltr"
-                placeholder="مثال: 1404/01/15"
-                value={deleteDate}
-                onChange={(e) => {
-                  setDeleteDate(e.target.value);
-                  setDeleteError(null);
-                }}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                فرمت: سال/ماه/روز (مثال: 1404/01/15)
-              </p>
+              
+              <PersianDateInput
+  label="تاریخ پایان"
+  value={deleteDate}
+  onChange={(value) => {
+    setDeleteDate(value);
+    setDeleteError(null);
+  }}
+  error={deleteError ?? undefined}
+  required
+/>
+              
               {deleteError && (
                 <p className="text-sm text-destructive">{deleteError}</p>
               )}
@@ -1558,26 +1554,17 @@ export default function UnitDetailPage() {
             )}
 
             {editTenantDialog.type === 'date' && (
-              <div className="space-y-2">
-                <Label htmlFor="editDate">تاریخ شروع سکونت (شمسی)</Label>
-                <Input
-                  id="editDate"
-                  dir="ltr"
-                  placeholder="مثال: 1404/01/01"
-                  value={editTenantDialog.date}
-                  onChange={(e) => {
-                    setEditTenantDialog((prev) => ({
-                      ...prev,
-                      date: e.target.value,
-                    }));
-                    setEditTenantError(null);
-                  }}
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  فرمت: سال/ماه/روز (مثال: 1404/01/01)
-                </p>
-              </div>
+               <PersianDateInput
+    label="تاریخ شروع سکونت"
+    value={editOwnerDialog.date}
+    onChange={(value) => {
+      setEditOwnerDialog((prev) => ({
+        ...prev,
+        date: value,
+      }));
+      setEditOwnerError(null);
+    }}
+  />
             )}
 
             {editTenantDialog.type === 'count' && (
@@ -1598,6 +1585,17 @@ export default function UnitDetailPage() {
                     setEditTenantError(null);
                   }}
                 />
+                <PersianDateInput
+    label="تاریخ شروع با این تعداد نفرات"
+    value={editOwnerDialog.date}
+    onChange={(value) => {
+      setEditOwnerDialog((prev) => ({
+        ...prev,
+        date: value,
+      }));
+      setEditOwnerError(null);
+    }}
+  />
               </div>
             )}
 
@@ -1705,27 +1703,18 @@ export default function UnitDetailPage() {
             )}
 
             {editOwnerDialog.type === 'date' && (
-              <div className="space-y-2">
-                <Label htmlFor="editOwnerDate">تاریخ شروع مالکیت (شمسی)</Label>
-                <Input
-                  id="editOwnerDate"
-                  dir="ltr"
-                  placeholder="مثال: 1404/01/01"
-                  value={editOwnerDialog.date}
-                  onChange={(e) => {
-                    setEditOwnerDialog((prev) => ({
-                      ...prev,
-                      date: e.target.value,
-                    }));
-                    setEditOwnerError(null);
-                  }}
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  فرمت: سال/ماه/روز (مثال: 1404/01/01)
-                </p>
-              </div>
-            )}
+  <PersianDateInput
+    label="تاریخ شروع مالکیت"
+    value={editOwnerDialog.date}
+    onChange={(value) => {
+      setEditOwnerDialog((prev) => ({
+        ...prev,
+        date: value,
+      }));
+      setEditOwnerError(null);
+    }}
+  />
+)}
 
             {editOwnerError && (
               <p className="text-sm text-destructive">{editOwnerError}</p>
@@ -1810,21 +1799,18 @@ export default function UnitDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="addDate">تاریخ شروع (شمسی)</Label>
-              <Input
-                id="addDate"
-                dir="ltr"
-                placeholder="مثال: 1404/01/01"
-                value={addDate}
-                onChange={(e) => {
-                  setAddDate(e.target.value);
-                  setAddError(null);
-                }}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                فرمت: سال/ماه/روز (مثال: 1404/01/01)
-              </p>
+               <PersianDateInput
+    label="تاریخ شروع "
+    value={editOwnerDialog.date}
+    onChange={(value) => {
+      setEditOwnerDialog((prev) => ({
+        ...prev,
+        date: value,
+      }));
+      setEditOwnerError(null);
+    }}
+  />
+              
             </div>
 
             {addPersonType === 'saken' && (

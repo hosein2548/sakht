@@ -6,7 +6,9 @@ import {
 } from "react";
 
 import Link from "next/link";
-
+import { buildFileUrl } from "@/src/core/config/env";
+import { PersianDateInput } from "@/components/ui/persian-date-input";
+import { validatePersianDate } from "@/src/shared/date/persian";
 import {
   AlertTriangle,
   ArrowRight,
@@ -317,7 +319,7 @@ export default function PaymentsPage() {
 
       setTitle("");
 
-      setDate("");
+      //setDate("");
 
       setPrice("");
 
@@ -357,17 +359,23 @@ export default function PaymentsPage() {
         return;
       }
 
-      if (
-        !/^\d{4}\/\d{2}\/\d{2}$/.test(
-          date.trim()
-        )
-      ) {
-        setDialogError(
-          "تاریخ را به صورت 1404/01/01 وارد کنید."
-        );
+      const dateValidation = validatePersianDate(date);
+if (!dateValidation.valid) {
+  setDialogError(dateValidation.message);
+  return;
+}
 
-        return;
-      }
+      // if (
+      //   !/^\d{4}\/\d{2}\/\d{2}$/.test(
+      //     date.trim()
+      //   )
+      // ) {
+      //   setDialogError(
+      //     "تاریخ را به صورت 1404/01/01 وارد کنید."
+      //   );
+
+      //   return;
+      // }
 
       if (
         !price.replace(
@@ -776,8 +784,7 @@ export default function PaymentsPage() {
                         <div className="flex items-center gap-2 text-sm">
                           <FileImage className="h-4 w-4" />
 
-                          <a
-                            href={`https://web120.ir/apartment/${payment.receipt}`}
+                          <a href={buildFileUrl(payment.receipt)}
                             target="_blank"
                             rel="noreferrer"
                             className="font-medium underline"
@@ -1018,23 +1025,13 @@ export default function PaymentsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>
-                  تاریخ پرداخت
-                </Label>
-
-                <Input
-                  dir="ltr"
-                  maxLength={10}
-                  placeholder="1404/01/01"
-                  value={date}
-                  onChange={(event) =>
-                    setDate(
-                      event.target
-                        .value
-                    )
-                  }
-                  disabled={saving}
-                />
+                <PersianDateInput
+  label="تاریخ پرداخت"
+  value={date}
+  onChange={setDate}
+  disabled={saving}
+  required
+/>
               </div>
 
               <div className="space-y-2">

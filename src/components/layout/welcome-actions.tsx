@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 import { useSession } from "@/src/providers";
-
+import { AuthService } from "@/src/core/auth/auth.service";
 
 export function WelcomeActions() {
 
@@ -30,6 +30,14 @@ export function WelcomeActions() {
     await logout();
 
     router.replace("/login");
+
+    
+    
+      // AuthService تنها نقطه خروج است:
+      // - Session سرور رو پاک می‌کنه
+      // - Storeها رو reset می‌کنه
+      // - خودش به /login هدایت می‌کنه
+      await AuthService.getInstance().logout();
 
   };
 

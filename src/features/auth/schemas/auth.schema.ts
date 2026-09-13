@@ -1,9 +1,13 @@
 import { z } from "zod";
+import { isValidPhone } from "@/src/shared/phone/phone";
+
 
 export const phoneSchema = z.object({
   mobile: z
     .string()
-    .regex(/^09\d{9}$/, "شماره موبایل معتبر نیست"),
+    .refine((val) => isValidPhone(val), {
+      message: "شماره موبایل معتبر نیست",
+    }),
 });
 
 export const otpSchema = z.object({
@@ -16,3 +20,4 @@ export const otpSchema = z.object({
 
 export type PhoneForm = z.infer<typeof phoneSchema>;
 export type OtpForm = z.infer<typeof otpSchema>;
+

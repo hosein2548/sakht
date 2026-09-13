@@ -1,6 +1,7 @@
 // src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { AUTH_SESSION_SECRET } from "@/src/core/config/env";
 
 const SESSION_COOKIE = "sakhteman-session";
 const SESSION_MAX_AGE = 60 * 60 * 24;
@@ -8,8 +9,10 @@ const SESSION_MAX_AGE = 60 * 60 * 24;
 async function isValidSession(token: string | undefined): Promise<boolean> {
   if (!token) return false;
 
-  const secret = process.env.AUTH_SESSION_SECRET;
-  if (!secret) return false;
+  if (!AUTH_SESSION_SECRET) return false;
+
+  // const secret = process.env.AUTH_SESSION_SECRET;
+  // if (!secret) return false;
 
   const parts = token.split(".");
   if (parts.length !== 3) return false;
@@ -24,7 +27,7 @@ async function isValidSession(token: string | undefined): Promise<boolean> {
   const data = `${timestamp}.${nonce}`;
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(secret),
+    new TextEncoder().encode(AUTH_SESSION_SECRET),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]

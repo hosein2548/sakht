@@ -6,7 +6,8 @@ import {
 } from "react";
 
 import Link from "next/link";
-
+import { PersianDateInput } from "@/components/ui/persian-date-input";
+import { validatePersianDate } from "@/src/shared/date/persian";
 import {
   ArrowRight,
   Check,
@@ -323,6 +324,17 @@ export default function NewExpensePage() {
         return false;
       }
 
+      const dateFromValidation = validatePersianDate(dateFrom);
+if (!dateFromValidation.valid) {
+  setError(dateFromValidation.message);
+  return false;
+}
+
+const dateToValidation = validatePersianDate(dateTo);
+if (!dateToValidation.valid) {
+  setError(dateToValidation.message);
+  return false;
+}
       if (
         !dateFrom ||
         dateFrom.length !== 10
@@ -1104,44 +1116,19 @@ export default function NewExpensePage() {
             </div>
 
             <div className="space-y-2">
-              <Label>
-                تاریخ شروع هزینه
-              </Label>
+              <PersianDateInput
+  label="تاریخ شروع هزینه"
+  value={dateFrom}
+  onChange={setDateFrom}
+  required
+/>
 
-              <Input
-                dir="ltr"
-                maxLength={10}
-                placeholder="1404/01/01"
-                value={
-                  dateFrom
-                }
-                onChange={(event) =>
-                  setDateFrom(
-                    event.target.value
-                  )
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                تاریخ پایان هزینه
-              </Label>
-
-              <Input
-                dir="ltr"
-                maxLength={10}
-                placeholder="1404/01/31"
-                value={
-                  dateTo
-                }
-                onChange={(event) =>
-                  setDateTo(
-                    event.target.value
-                  )
-                }
-              />
-            </div>
+<PersianDateInput
+  label="تاریخ پایان هزینه"
+  value={dateTo}
+  onChange={setDateTo}
+  required
+/></div>
 
             <div className="space-y-2">
               <Label>

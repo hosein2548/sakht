@@ -1,7 +1,18 @@
+// src/core/auth/auth.service.ts
+// ============================================================
+// سرویس مرکزی احراز هویت
+// - همه منطق تجاری اینجاست (fetch, parse, storage session)
+// - State مدیریت‌شده در src/core/store/auth.store.ts
+// ============================================================
+
 import { apiClient } from "@/src/core/api/client";
 import { useAuthStore } from "@/src/core/store/auth.store";
 import { useAppStore } from "@/src/core/store/app.store";
 import type { AuthUser } from "@/src/core/store/auth.store";
+
+// ============================================================
+// Types
+// ============================================================
 
 export interface LoginResponse {
   success: boolean;
@@ -15,8 +26,14 @@ export interface SessionResponse {
   message?: string;
 }
 
+// ============================================================
+// Service
+// ============================================================
+
 export class AuthService {
-  private static instance: AuthService;
+  private static instance: AuthService | null = null;
+
+  private constructor() {}
 
   static getInstance(): AuthService {
     if (!AuthService.instance) {
@@ -24,6 +41,10 @@ export class AuthService {
     }
     return AuthService.instance;
   }
+
+  // ==========================================================
+  // Public API
+  // ==========================================================
 
   /**
    * ارسال کد تایید به شماره موبایل
@@ -44,11 +65,11 @@ export class AuthService {
         };
       }
 
-      // استخراج زمان انقضا از پاسخ
+      // استخراج زمان انقضا از پاسخ: ok120...
       let expirySeconds = 120;
-      const numberMatch = raw.match(/^ok(\d+)/);
-      if (numberMatch && numberMatch[1]) {
-        expirySeconds = parseInt(numberMatch[1]) * 60;
+      const match = raw.match(/^ok(\d+)/);
+      if (match?.[1]) {
+        expirySeconds = parseInt(match[1], 10) * 60;
       }
 
       return {
@@ -85,7 +106,6 @@ export class AuthService {
         };
       }
 
-      // استخراج اطلاعات کاربر از پاسخ
       const user = this.extractUserFromResponse(raw, phone);
       if (!user) {
         return {
@@ -103,21 +123,14 @@ export class AuthService {
         };
       }
 
-      // ذخیره در Storeهای Zustand
+      // ذخیره در Store
       const authStore = useAuthStore.getState();
       const appStore = useAppStore.getState();
 
       authStore.setUser(user);
-      authStore.setAuthenticated(true);
       appStore.setUser(user);
 
-      // ذخیره در localStorage برای persist
-      this.saveUserToStorage(user);
-
-      return {
-        success: true,
-        user,
-      };
+      return { success: true, user };
     } catch (error) {
       console.error("[AuthService] verifyCode error:", error);
       return {
@@ -128,7 +141,7 @@ export class AuthService {
   }
 
   /**
-   * ایجاد Session در سرور (HttpOnly Cookie)
+   * ایجاد Session HttpOnly در سرور
    */
   async createSession(): Promise<SessionResponse> {
     try {
@@ -144,9 +157,13 @@ export class AuthService {
         };
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+      };
+
       return {
-        success: data.success || false,
+        success: Boolean(data.success),
         message: data.message,
       };
     } catch (error) {
@@ -159,33 +176,23 @@ export class AuthService {
   }
 
   /**
-   * بررسی وضعیت احراز هویت (همگام‌سازی)
+   * بررسی وضعیت احراز هویت
+   * اولویت: Store → Session سرور
    */
   async checkAuth(): Promise<AuthUser | null> {
-    // اول از Storeها چک کن
     const authStore = useAuthStore.getState();
-    const appStore = useAppStore.getState();
 
+    // 1) اگر در Store هست
     if (authStore.isAuthenticated && authStore.user) {
       return authStore.user;
     }
 
-    // اگر در Store نبود، از localStorage بخوان
-    const stored = this.loadUserFromStorage();
-    if (stored) {
-      authStore.setUser(stored);
-      authStore.setAuthenticated(true);
-      appStore.setUser(stored);
-      return stored;
-    }
-
-    // اگر هیچکدام نبود، Session رو چک کن (با سرور)
+    // 2) اگر در Session سرور هست
     const sessionUser = await this.validateSession();
     if (sessionUser) {
+      const appStore = useAppStore.getState();
       authStore.setUser(sessionUser);
-      authStore.setAuthenticated(true);
       appStore.setUser(sessionUser);
-      this.saveUserToStorage(sessionUser);
       return sessionUser;
     }
 
@@ -193,13 +200,12 @@ export class AuthService {
   }
 
   /**
-   * خروج کاربر
+   * خروج کاربر (تنها نقطه خروج)
+   * - حذف Session سرور
+   * - پاک کردن Store
+   * - هدایت به صفحه ورود
    */
   async logout(): Promise<void> {
-    const authStore = useAuthStore.getState();
-    const appStore = useAppStore.getState();
-
-    // پاک کردن Session در سرور
     try {
       await fetch("/api/auth/session", {
         method: "DELETE",
@@ -210,38 +216,50 @@ export class AuthService {
     }
 
     // پاک کردن Storeها
-    authStore.logout();
-    appStore.clearUser();
+    useAuthStore.getState().reset();
+    useAppStore.getState().clearUser();
 
-    // پاک کردن localStorage
-    this.clearUserFromStorage();
-
-    // هدایت به لاگین
+    // هدایت به صفحه ورود
     if (typeof window !== "undefined") {
       window.location.href = "/login";
     }
   }
 
-  // ============ Private Methods ============
+  // ==========================================================
+  // Private Helpers
+  // ==========================================================
 
-  private extractUserFromResponse(response: string, phone: string): AuthUser | null {
+  /**
+   * استخراج اطلاعات کاربر از پاسخ متنی سرور
+   * فرمت: ok[{...}]
+   */
+  private extractUserFromResponse(
+    response: string,
+    phone: string
+  ): AuthUser | null {
     try {
       const jsonStart = response.indexOf("[");
       if (jsonStart === -1) return null;
 
-      const jsonText = response.substring(jsonStart);
-      const data = JSON.parse(jsonText);
+      const data = JSON.parse(response.substring(jsonStart)) as unknown;
 
       if (!Array.isArray(data) || data.length === 0) return null;
 
-      const item = data[0];
+      const item = data[0] as Record<string, unknown>;
       if (!item?.iduser) return null;
+
+      const role =
+        item.role === "modir" ||
+        item.role === "malek" ||
+        item.role === "saken"
+          ? item.role
+          : null;
 
       return {
         iduser: String(item.iduser),
-        nameuser: String(item.nameuser || ""),
+        nameuser: String(item.nameuser ?? ""),
         phone,
-        role: null,
+        role,
       };
     } catch (error) {
       console.error("[AuthService] extractUser error:", error);
@@ -249,6 +267,9 @@ export class AuthService {
     }
   }
 
+  /**
+   * بررسی Session در سرور
+   */
   private async validateSession(): Promise<AuthUser | null> {
     try {
       const response = await fetch("/api/auth/session", {
@@ -258,42 +279,10 @@ export class AuthService {
 
       if (!response.ok) return null;
 
-      const data = await response.json();
-      if (data.user) {
-        return data.user;
-      }
-      return null;
+      const data = (await response.json()) as { user?: AuthUser };
+      return data.user ?? null;
     } catch {
       return null;
-    }
-  }
-
-  private saveUserToStorage(user: AuthUser): void {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem("sakhteman_user", JSON.stringify(user));
-    } catch (error) {
-      console.error("[AuthService] saveUser error:", error);
-    }
-  }
-
-  private loadUserFromStorage(): AuthUser | null {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem("sakhteman_user");
-      if (!raw) return null;
-      return JSON.parse(raw) as AuthUser;
-    } catch {
-      return null;
-    }
-  }
-
-  private clearUserFromStorage(): void {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.removeItem("sakhteman_user");
-    } catch (error) {
-      console.error("[AuthService] clearUser error:", error);
     }
   }
 }

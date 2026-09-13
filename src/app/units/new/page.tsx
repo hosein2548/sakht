@@ -10,6 +10,11 @@ import { useAppStore } from "@/src/core/store/app.store";
 import { useBuildingStore } from "@/src/features/building/store/building.store";
 import { unitApi } from "@/src/features/units/api/unit.api";
 import { useSession } from "@/src/providers";
+import {
+  getTodayPersian,
+  validatePersianDate,
+} from "@/src/shared/date/persian";
+import { PersianDateInput } from "@/components/ui/persian-date-input";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,32 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // Helper
 // ============================================
 
-function getTodayPersian(): string {
-  const now = new Date();
-  const year = now.getFullYear() - 621;
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
-}
 
-function isValidPersianDate(date: string): boolean {
-  const pattern = /^(\d{4})\/(\d{2})\/(\d{2})$/;
-  if (!pattern.test(date)) return false;
-
-  const [, year, month, day] = date.match(pattern) || [];
-  const y = parseInt(year);
-  const m = parseInt(month);
-  const d = parseInt(day);
-
-  if (y < 1300 || y > 1500) return false;
-  if (m < 1 || m > 12) return false;
-  if (d < 1 || d > 31) return false;
-
-  const daysInMonth = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
-  if (d > daysInMonth[m - 1]) return false;
-
-  return true;
-}
 
 // ============================================
 // Component
@@ -88,6 +68,7 @@ export default function NewUnitPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  
   // ============================================
   // Auth Check
   // ============================================
@@ -114,15 +95,11 @@ export default function NewUnitPage() {
       return false;
     }
 
-    if (!datefrom || datefrom.length !== 10) {
-      setError("تاریخ شروع را به صورت صحیح وارد کنید.");
-      return false;
-    }
-
-    if (!isValidPersianDate(datefrom)) {
-      setError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-      return false;
-    }
+   const dateValidation = validatePersianDate(datefrom);
+if (!dateValidation.valid) {
+  setError(dateValidation.message);
+  return false;
+}
 
     return true;
   };
@@ -416,22 +393,19 @@ export default function NewUnitPage() {
                 تاریخ شروع
                 ============================================ */}
             <div className="space-y-2">
-              <Label htmlFor="unit-date">
-                تاریخ شروع <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="unit-date"
-                dir="ltr"
-                placeholder="مثال: 1404/01/01"
-                value={datefrom}
-                onChange={(e) => {
-                  setDatefrom(e.target.value);
-                  if (error) setError(null);
-                }}
-                disabled={isSubmitting}
-                maxLength={10}
-                className="font-mono"
-              />
+              
+              <PersianDateInput
+  label="تاریخ شروع"
+  value={datefrom}
+  onChange={(value) => {
+    setDatefrom(value);
+    if (error) setError(null);
+  }}
+  disabled={isSubmitting}
+  required
+  hint="تاریخ شروع بهره‌برداری از واحد"
+/>
+            
               <p className="text-xs text-muted-foreground">
                 فرمت: سال/ماه/روز (مثال: 1404/01/01)
               </p>

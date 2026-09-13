@@ -1,32 +1,61 @@
 // src/core/store/auth.store.ts
+// ============================================================
+// تنها مرجع State احراز هویت در کل پروژه
+// - این Store فقط مسئول State است، نه منطق تجاری
+// - منطق تجاری در src/core/auth/auth.service.ts قرار دارد
+// - از persist برای نگهداری کاربر بین refresh ها استفاده می‌کند
+// ============================================================
+
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+
+// ============================================================
+// Types
+// ============================================================
+
+export type UserRole = "modir" | "malek" | "saken" | null;
 
 export interface AuthUser {
   iduser: string;
   nameuser: string;
   phone: string;
-  role?: "modir" | "malek" | "saken" | null;
+  role?: UserRole;
 }
 
 export interface AuthState {
+  // ---------- State ----------
   user: AuthUser | null;
   phone: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  role: "modir" | "malek" | "saken" | null;
+  role: UserRole;
 
-  // Actions
+  /**
+   * آیا persist کامل شده؟
+   * برای جلوگیری از race condition در اولین render استفاده می‌شود.
+   */
+  hydrated: boolean;
+
+  // ---------- Actions ----------
   setUser: (user: AuthUser | null) => void;
   setPhone: (phone: string | null) => void;
   setAuthenticated: (status: boolean) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  setRole: (role: "modir" | "malek" | "saken" | null) => void;
-  logout: () => void;
-  clear: () => void;
+  setRole: (role: UserRole) => void;
+  setHydrated: (hydrated: boolean) => void;
+
+  /**
+   * پاک کردن کامل State (بدون منطق تجاری).
+   * برای logout از AuthService.logout() استفاده کنید.
+   */
+  reset: () => void;
 }
+
+// ============================================================
+// Initial State
+// ============================================================
 
 const initialState = {
   user: null,
@@ -35,17 +64,25 @@ const initialState = {
   isLoading: false,
   error: null,
   role: null,
-};
+  hydrated: false,
+} as const;
+
+// ============================================================
+// Store
+// ============================================================
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       ...initialState,
 
+      // ---------- Actions ----------
+
       setUser: (user) =>
         set({
           user,
-          isAuthenticated: !!user,
+          isAuthenticated: Boolean(user),
+          role: user?.role ?? null,
           error: null,
         }),
 
@@ -59,26 +96,25 @@ export const useAuthStore = create<AuthState>()(
 
       setRole: (role) => set({ role }),
 
-      logout: () => {
-        set({ ...initialState });
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("auth-storage");
-          localStorage.removeItem("sakhteman_user");
-          // حذف Session در سرور
-          fetch("/api/auth/session", { method: "DELETE" }).catch(console.error);
-        }
-      },
+      setHydrated: (hydrated) => set({ hydrated }),
 
-      clear: () => set({ ...initialState }),
+      reset: () => set({ ...initialState, hydrated: true }),
     }),
     {
       name: "auth-storage",
+
+      // فقط این فیلدها persist می‌شوند
       partialize: (state) => ({
         user: state.user,
         phone: state.phone,
         isAuthenticated: state.isAuthenticated,
         role: state.role,
       }),
+
+      // اطلاع از اتمام rehydration
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated(true);
+      },
     }
   )
 );

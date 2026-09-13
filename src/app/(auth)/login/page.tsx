@@ -1,6 +1,7 @@
 // src/app/(auth)/login/page.tsx
 "use client";
-
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhone } from "@/src/shared/phone/phone";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -32,10 +33,11 @@ export default function LoginPage() {
 
   const handleSubmit = async () => {
     // اعتبارسنجی شماره
-    if (phone.length !== 11) {
-      setError("شماره موبایل باید ۱۱ رقم باشد.");
-      return;
-    }
+    const phoneValidation = validatePhone(phone);
+if (!phoneValidation.valid) {
+  setError(phoneValidation.message);
+  return;
+}
 
     setIsLoading(true);
     setError("");
@@ -105,23 +107,18 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-2">
-            <Input
-              dir="ltr"
-              type="tel"
-              inputMode="numeric"
-              maxLength={11}
-              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-              className="h-12 text-center text-lg font-medium"
-              value={phone}
-              onChange={(event) => {
-                const value = event.target.value.replace(/\D/g, "");
-                setPhone(value);
-                if (error) setError("");
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-            />
-            <p className="text-center text-xs text-muted-foreground">شماره موبایل را با ۰ شروع کنید</p>
+            <PhoneInput
+  value={phone}
+  onChange={(value) => {
+    setPhone(value);
+    if (error) setError("");
+  }}
+  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+  error={error || undefined}
+  disabled={isLoading}
+  
+  className="[&_input]:h-12 [&_input]:text-center [&_input]:text-lg"
+/>
           </div>
 
           <Button

@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { AuthUser } from "../types/auth.types";
+import { PHP_VERIFY_API_BASE_URL } from "@/src/core/config/env";
 
-const PHP_BASE_URL =
-  process.env.PHP_API_BASE_URL ?? "https://web120.ir/apartment/app_ver1";
+//const PHP_BASE_URL = process.env.PHP_API_BASE_URL ?? "https://web120.ir/apartment/app_ver1";
 
 function extractUser(raw: string, phone: string): AuthUser | null {
   if (!raw.startsWith("ok")) return null;
@@ -36,7 +36,7 @@ export async function verifyLoginCode(
   phone: string,
   code: string
 ): Promise<AuthUser | null> {
-  const response = await fetch(`${PHP_BASE_URL}/login.php`, {
+  const response = await fetch(`${PHP_VERIFY_API_BASE_URL}/login.php`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -15,7 +15,7 @@ import {
 
 import { unitHistoryApi } from "@/src/features/units/api/unit-history.api";
 import { useBuildingStore } from "@/src/features/building/store/building.store";
-
+import { getTodayPersian } from "@/src/shared/date/persian";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -71,13 +71,7 @@ function HistoryContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const getTodayPersian = useCallback(() => {
-    const now = new Date();
-    const year = now.getFullYear() - 621;
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}/${month}/${day}`;
-  }, []);
+  
 
   const loadHistory = useCallback(async () => {
     console.log("🔍 Loading history for:", { unitId, userId });

@@ -1,7 +1,7 @@
 // src/app/bills/page.tsx
 "use client";
 import { useRouter } from "next/navigation";
-
+import { PersianDateInput } from "@/components/ui/persian-date-input";
 import {
   useEffect,
   useState,
@@ -640,24 +640,18 @@ export default function BillsPage() {
                 {/* فیلتر تاریخ */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>از تاریخ</Label>
-                    <Input
-                      dir="ltr"
-                      maxLength={10}
-                      placeholder="1404/01/01"
-                      value={dateStart}
-                      onChange={(e) => setDateStart(e.target.value)}
-                    />
+                    <PersianDateInput
+    label="از تاریخ"
+    value={dateStart}
+    onChange={setDateStart}
+  />
                   </div>
                   <div className="space-y-2">
-                    <Label>تا تاریخ</Label>
-                    <Input
-                      dir="ltr"
-                      maxLength={10}
-                      placeholder="1404/01/31"
-                      value={dateEnd}
-                      onChange={(e) => setDateEnd(e.target.value)}
-                    />
+                    <PersianDateInput
+    label="تا تاریخ"
+    value={dateEnd}
+    onChange={setDateEnd}
+  />
                   </div>
                 </div>
 

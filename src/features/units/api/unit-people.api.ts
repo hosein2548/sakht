@@ -15,6 +15,15 @@ export interface Resident {
   naghsh: 'مالک' | 'ساکن' | string;
 }
 
+import {
+  getTodayPersian,
+  isValidPersianDate,
+  validatePersianDate,
+} from "@/src/shared/date/persian";
+
+// re-export برای backward compatibility
+export { getTodayPersian, isValidPersianDate };
+
 export interface AddPersonParams {
   unitId: string;
   phone: string;
@@ -58,32 +67,9 @@ export interface ApiResponse {
 // Helper Functions
 // ============================================
 
-export function getTodayPersian(): string {
-  const now = new Date();
-  const year = now.getFullYear() - 621;
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}/${month}/${day}`;
-}
 
-export function isValidPersianDate(date: string): boolean {
-  const pattern = /^(\d{4})\/(\d{2})\/(\d{2})$/;
-  if (!pattern.test(date)) return false;
 
-  const [, year, month, day] = date.match(pattern) || [];
-  const y = parseInt(year);
-  const m = parseInt(month);
-  const d = parseInt(day);
 
-  if (y < 1300 || y > 1500) return false;
-  if (m < 1 || m > 12) return false;
-  if (d < 1 || d > 31) return false;
-
-  const daysInMonth = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
-  if (d > daysInMonth[m - 1]) return false;
-
-  return true;
-}
 
 function parsePeopleResponse(raw: string): Resident[] {
   console.log("📋 Raw people response:", raw);

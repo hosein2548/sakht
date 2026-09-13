@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import Link from "next/link";
-
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhone } from "@/src/shared/phone/phone";
 import {
   ArrowRight,
   Edit,
@@ -333,29 +334,35 @@ export default function UnitPeoplePage() {
         return;
       }
 
-      if (
-        !/^09\d{9}$/.test(
-          phone.trim()
-        )
-      ) {
-        setActionMessage(
-          "شماره همراه باید ۱۱ رقم و با 09 شروع شود."
-        );
+      const phoneValidation = validatePhone(phone);
+if (!phoneValidation.valid) {
+  
+  return(phoneValidation.message);
+}
 
-        return;
-      }
+      // if (
+      //   !/^09\d{9}$/.test(
+      //     phone.trim()
+      //   )
+      // ) {
+      //   setActionMessage(
+      //     "شماره همراه باید ۱۱ رقم و با 09 شروع شود."
+      //   );
 
-      if (
-        !/^\d{4}\/\d{2}\/\d{2}$/.test(
-          date.trim()
-        )
-      ) {
-        setActionMessage(
-          "تاریخ شروع را به صورت 1404/01/01 وارد کنید."
-        );
+      //   return;
+      // }
 
-        return;
-      }
+      // if (
+      //   !/^\d{4}\/\d{2}\/\d{2}$/.test(
+      //     date.trim()
+      //   )
+      // ) {
+      //   setActionMessage(
+      //     "تاریخ شروع را به صورت 1404/01/01 وارد کنید."
+      //   );
+
+      //   return;
+      // }
 
       if (
         dialog.role ===
@@ -430,45 +437,49 @@ export default function UnitPeoplePage() {
       ) {
         return;
       }
+const phoneValidation = validatePhone(phone);
+if (!phoneValidation.valid) {
+  
+  return(phoneValidation.message);
+}
+      // if (
+      //   !/^\d{4}\/\d{2}\/\d{2}$/.test(
+      //     date.trim()
+      //   )
+      // ) {
+      //   setActionMessage(
+      //     "تاریخ شروع را به صورت 1404/01/01 وارد کنید."
+      //   );
 
-      if (
-        !/^\d{4}\/\d{2}\/\d{2}$/.test(
-          date.trim()
-        )
-      ) {
-        setActionMessage(
-          "تاریخ شروع را به صورت 1404/01/01 وارد کنید."
-        );
+      //   return;
+      // }
 
-        return;
-      }
+      // if (
+      //   dialog.role === "malek" &&
+      //   !/^09\d{9}$/.test(
+      //     phone.trim()
+      //   )
+      // ) {
+      //   setActionMessage(
+      //     "شماره همراه مالک نامعتبر است."
+      //   );
 
-      if (
-        dialog.role === "malek" &&
-        !/^09\d{9}$/.test(
-          phone.trim()
-        )
-      ) {
-        setActionMessage(
-          "شماره همراه مالک نامعتبر است."
-        );
+      //   return;
+      // }
 
-        return;
-      }
+      // if (
+      //   dialog.role === "saken" &&
+      //   phone &&
+      //   !/^09\d{9}$/.test(
+      //     phone.trim()
+      //   )
+      // ) {
+      //   setActionMessage(
+      //     "شماره همراه ساکن نامعتبر است."
+      //   );
 
-      if (
-        dialog.role === "saken" &&
-        phone &&
-        !/^09\d{9}$/.test(
-          phone.trim()
-        )
-      ) {
-        setActionMessage(
-          "شماره همراه ساکن نامعتبر است."
-        );
-
-        return;
-      }
+      //   return;
+      // }
 
       try {
         setSaving(true);
@@ -748,27 +759,15 @@ export default function UnitPeoplePage() {
                 <div className="mt-5 space-y-4">
 
                   <div className="space-y-2">
-                    <Label>
-                      شماره همراه
-                    </Label>
+                    <PhoneInput
+  label="شماره موبایل "
+  value={phone}
+  onChange={setPhone}
+  disabled={ saving}
+  required
+/>
 
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      maxLength={11}
-                      value={phone}
-                      onChange={(event) =>
-                        setPhone(
-                          event.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
-                      }
-                      disabled={
-                        saving
-                      }
-                    />
+                   
                   </div>
 
                   <div className="space-y-2">

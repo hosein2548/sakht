@@ -12,7 +12,7 @@ import type {
   UnitBillItem,
   FundBillItem,
 } from "../types/billing.types";
-
+import { getTodayPersian } from "@/src/shared/date/persian";
 // ============================================
 // Font Registration (برای پشتیبانی از فارسی)
 // ============================================
@@ -244,8 +244,10 @@ export function PDFBillsDocument(props: PDFBillsProps) {
     return "";
   };
 
-  const now = new Date();
-  const persianDate = `${now.getFullYear() - 621}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
+  
+  const persianDate = getTodayPersian();
+  // const now = new Date();
+  // const persianDate = `${now.getFullYear() - 621}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
 
   return (
     <Document>

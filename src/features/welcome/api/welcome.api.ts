@@ -1,65 +1,26 @@
-import { apiClient } from "@/src/core/api/client";
+// src/features/welcome/api/welcome.api.ts
+import { buildWelcomeImageUrl } from "@/src/core/config/env";
+import type { WelcomeSlide } from "../types/welcome.types";
 
-import type {
-  WelcomeSlide,
-} from "@/src/features/welcome/types/welcome.types";
-
+// نام فایل‌های تصاویر اسلایدر
+const SLIDE_FILES = [
+  "1.png",
+  "2.png",
+  "3.png",
+  "4.png",
+  "5.png",
+  "6.png",
+  "7.png",
+  "8.png",
+] as const;
 
 export const welcomeApi = {
-
-
   async getSlides(): Promise<WelcomeSlide[]> {
-
-
-    /*
-      فعلا مطابق Flutter
-      بعدا اگر API شد فقط اینجا تغییر می‌کند
-    */
-
-
-    return [
-      {
-        id:1,
-        image:
-        "http://web120.ir/apartment/picperesent/1.png",
-      },
-      {
-        id:2,
-        image:
-        "http://web120.ir/apartment/picperesent/2.png",
-      },
-      {
-        id:3,
-        image:
-        "http://web120.ir/apartment/picperesent/3.png",
-      },
-      {
-        id:4,
-        image:
-        "http://web120.ir/apartment/picperesent/4.png",
-      },
-      {
-        id:5,
-        image:
-        "http://web120.ir/apartment/picperesent/5.png",
-      },
-      {
-        id:6,
-        image:
-        "http://web120.ir/apartment/picperesent/6.png",
-      },
-      {
-        id:7,
-        image:
-        "http://web120.ir/apartment/picperesent/7.png",
-      },
-      {
-        id:8,
-        image:
-        "http://web120.ir/apartment/picperesent/8.png",
-      },
-    ];
-
-  }
-
+    // فعلاً از فایل‌های ثابت استفاده می‌کنیم
+    // بعداً اگر API اضافه شد، فقط این تابع عوض می‌شه
+    return SLIDE_FILES.map((filename, index) => ({
+      id: index + 1,
+      image: buildWelcomeImageUrl(filename),
+    }));
+  },
 };

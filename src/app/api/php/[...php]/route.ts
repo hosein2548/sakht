@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PHP_API_BASE_URL } from "@/src/core/config/env";
 
-const PHP_BASE_URL =
-  "https://web120.ir/apartment/next";
+//const targetUrl = `${PHP_API_BASE_URL}/${phpPath}` + request.nextUrl.search;
+
+//const PHP_BASE_URL = "https://web120.ir/apartment/next";
 
 type RouteContext = {
   params: Promise<{
@@ -18,9 +20,7 @@ async function proxyRequest(
 
     const phpPath = php.join("/");
 
-    const targetUrl =
-      `${PHP_BASE_URL}/${phpPath}` +
-      request.nextUrl.search;
+    const targetUrl = `${PHP_API_BASE_URL}/${phpPath}` + request.nextUrl.search;
 
     const body =
       request.method === "GET" ||

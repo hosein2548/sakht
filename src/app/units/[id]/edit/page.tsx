@@ -2,7 +2,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-
+import { PersianDateInput } from "@/components/ui/persian-date-input";
 import Link from "next/link";
 
 import {
@@ -490,22 +490,15 @@ export default function EditUnitPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>
-                  تاریخ شروع
-                </Label>
-
-                <Input
-                  value={datefrom}
-                  maxLength={10}
-                  placeholder="1404/01/01"
-                  dir="ltr"
-                  onChange={(event) =>
-                    setDatefrom(
-                      event.target.value
-                    )
-                  }
-                  disabled={isSaving}
-                />
+                
+              <PersianDateInput
+  label="تاریخ شروع"
+  value={datefrom}
+  onChange={setDatefrom}
+  disabled={isSaving}
+  required
+  hint="تاریخ شروع مالکیت یا سکونت"
+/>
               </div>
 
               <div className="space-y-2">

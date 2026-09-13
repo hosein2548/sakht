@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhone } from "@/src/shared/phone/phone";
 
 import Link from "next/link";
 
@@ -228,17 +230,22 @@ export default function ManagementPage() {
         return;
       }
 
-      if (
-        !/^09\d{9}$/.test(
-          phone.trim()
-        )
-      ) {
-        setMessage(
-          "شماره موبایل باید ۱۱ رقم و با 09 شروع شود."
-        );
+      const phoneValidation = validatePhone(phone);
+if (!phoneValidation.valid) {
+  setMessage(phoneValidation.message);
+  return;
+}
+      // if (
+      //   !/^09\d{9}$/.test(
+      //     phone.trim()
+      //   )
+      // ) {
+      //   setMessage(
+      //     "شماره موبایل باید ۱۱ رقم و با 09 شروع شود."
+      //   );
 
-        return;
-      }
+      //   return;
+      // }
 
       try {
         setCheckingPhone(
@@ -650,31 +657,13 @@ export default function ManagementPage() {
                 <div className="mt-5 space-y-4">
 
                   <div className="space-y-2">
-                    <Label>
-                      شماره موبایل مدیر
-                    </Label>
-
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      maxLength={11}
-                      placeholder="09123456789"
-                      value={phone}
-                      onChange={(
-                        event
-                      ) =>
-                        setPhone(
-                          event.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
-                      }
-                      disabled={
-                        checkingPhone ||
-                        saving
-                      }
-                    />
+                    <PhoneInput
+  label="شماره موبایل مدیر"
+  value={phone}
+  onChange={setPhone}
+  disabled={checkingPhone || saving}
+  required
+/>
                   </div>
 
                   {message && (

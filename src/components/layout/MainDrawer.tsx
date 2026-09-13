@@ -3,19 +3,20 @@
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import {
-  authStorage,
-} from "@/src/core/storage/auth.storage";
+// import {
+//   authStorage,
+// } from "@/src/core/storage/auth.storage";
 
-import {
-  useAppStore,
-} from "@/src/core/store/app.store";
+// import {
+//   useAppStore,
+// } from "@/src/core/store/app.store";
 
 
 import { cn } from "@/src/lib/utils";
 
 import { useBuildingStore } from "@/src/features/building/store/building.store";
-import { useAuthStore } from "@/src/features/auth/store/auth.store";
+import { AuthService } from "@/src/core/auth/auth.service";
+
 
 import {
   ArrowLeftRight,
@@ -118,37 +119,25 @@ export default function MainDrawer({
     const router = useRouter();
   
 
-   const user = useAppStore((state) => state.user);
+   //const user = useAppStore((state) => state.user);
   const selectedBuilding = useBuildingStore((state) => state.selectedBuilding);
   const selectedUnit = useBuildingStore((state) => state.selectedUnit);
-  const handleLogout = () => {
-  const confirmed =
-    window.confirm(
-      "آیا نسبت به خروج از محیط کاربری اطمینان دارید؟"
-    );
-
-  if (!confirmed) {
-    return;
-  }
-  
-  if (typeof window !== "undefined") {
-      localStorage.clear();
-      sessionStorage.clear();
-    }
-
-  authStorage.clear();
-
-  useAppStore
-    .getState()
-    .clearUser();
-
-    onOpenChange(false);
-    localStorage.clear();
-    useAuthStore.getState().logout();
-    useBuildingStore.getState().clearSelection?.();
-  router.push(
-    "/login"
+  const handleLogout = async () => {
+   const confirmed = window.confirm(
+    "آیا نسبت به خروج از محیط کاربری اطمینان دارید؟"
   );
+
+  if (!confirmed) return;
+
+  onOpenChange(false);
+
+  // AuthService تنها نقطه خروج است:
+  // - Session سرور رو پاک می‌کنه
+  // - Storeها رو reset می‌کنه
+  // - خودش به /login هدایت می‌کنه
+  await AuthService.getInstance().logout();
+
+
 };
 
   return (
@@ -212,7 +201,7 @@ export default function MainDrawer({
               type="button"
               variant="ghost"
               className="w-full justify-start text-destructive hover:text-destructive"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
             >
               <LogOut className="ml-3 h-5 w-5" />
 

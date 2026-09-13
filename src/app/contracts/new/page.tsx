@@ -1,6 +1,9 @@
 // src/app/contracts/new/page.tsx
 "use client";
-
+import { PersianDateInput } from "@/components/ui/persian-date-input";
+import { validatePersianDate } from "@/src/shared/date/persian";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhone } from "@/src/shared/phone/phone";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -157,20 +160,38 @@ export default function NewContractPage() {
       return false;
     }
 
-    if (!phone.trim() || !/^09\d{9}$/.test(phone.trim())) {
-      setError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم با 09).");
-      return false;
-    }
+    const phoneValidation = validatePhone(phone);
+if (!phoneValidation.valid) {
+  setError(phoneValidation.message);
+  return false;
+}
 
-    if (!startDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(startDate)) {
-      setError("تاریخ شروع را به صورت 1404/01/01 وارد کنید.");
-      return false;
-    }
+    // if (!phone.trim() || !/^09\d{9}$/.test(phone.trim())) {
+    //   setError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم با 09).");
+    //   return false;
+    // }
 
-    if (!endDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(endDate)) {
-      setError("تاریخ پایان را به صورت 1404/01/01 وارد کنید.");
-      return false;
-    }
+    const startValidation = validatePersianDate(startDate);
+if (!startValidation.valid) {
+  setError(startValidation.message);
+  return false;
+}
+
+const endValidation = validatePersianDate(endDate);
+if (!endValidation.valid) {
+  setError(endValidation.message);
+  return false;
+}
+
+    // if (!startDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(startDate)) {
+    //   setError("تاریخ شروع را به صورت 1404/01/01 وارد کنید.");
+    //   return false;
+    // }
+
+    // if (!endDate || !/^\d{4}\/\d{2}\/\d{2}$/.test(endDate)) {
+    //   setError("تاریخ پایان را به صورت 1404/01/01 وارد کنید.");
+    //   return false;
+    // }
 
     if (!price || parseFloat(price.replace(/,/g, "")) <= 0) {
       setError("مبلغ قرارداد را وارد کنید.");
@@ -390,20 +411,14 @@ export default function NewContractPage() {
                 تلفن
                 ============================================ */}
             <div className="space-y-2">
-              <Label htmlFor="phone">شماره تماس</Label>
-              <Input
-                id="phone"
-                dir="ltr"
-                type="tel"
-                maxLength={11}
-                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-                value={phone}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, "");
-                  setPhone(value);
-                }}
-                disabled={formState === "loading"}
-              />
+              <PhoneInput
+  id="phone"
+  label="شماره تماس"
+  value={phone}
+  onChange={setPhone}
+  disabled={formState === "loading"}
+  required
+/>
             </div>
 
             {/* ============================================
@@ -425,33 +440,22 @@ export default function NewContractPage() {
                 تاریخ‌ها
                 ============================================ */}
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">تاریخ شروع</Label>
-                <Input
-                  id="startDate"
-                  dir="ltr"
-                  placeholder="1404/01/01"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  disabled={formState === "loading"}
-                  maxLength={10}
-                />
-                <p className="text-xs text-muted-foreground">فرمت: سال/ماه/روز</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="endDate">تاریخ پایان</Label>
-                <Input
-                  id="endDate"
-                  dir="ltr"
-                  placeholder="1404/12/29"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  disabled={formState === "loading"}
-                  maxLength={10}
-                />
-                <p className="text-xs text-muted-foreground">فرمت: سال/ماه/روز</p>
-              </div>
+             <div className="grid gap-4 sm:grid-cols-2">
+  <PersianDateInput
+    label="تاریخ شروع"
+    value={startDate}
+    onChange={setStartDate}
+    disabled={formState === "loading"}
+    required
+  />
+  <PersianDateInput
+    label="تاریخ پایان"
+    value={endDate}
+    onChange={setEndDate}
+    disabled={formState === "loading"}
+    required
+  />
+</div>
             </div>
 
             {/* ============================================

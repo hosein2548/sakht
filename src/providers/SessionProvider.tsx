@@ -18,25 +18,30 @@ interface SessionContextType {
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // ✅ اصلاح: استفاده از type annotation
-  const { user, isAuthenticated, setUser, setAuthenticated } = useAuthStore();
-  const { setUser: setAppUser } = useAppStore();
+  const [isInitializing, setIsInitializing] = useState(true);
 
+  // انتخاب‌های دقیق از Store (جلوگیری از re-render اضافه)
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const setUser = useAuthStore((s) => s.setUser);
+  const setAppUser = useAppStore((s) => s.setUser);
+
+  // انتظار برای اتمام persist و سپس بررسی Session
   useEffect(() => {
+    if (!hydrated) return;
+
     const initSession = async () => {
       try {
-        setIsLoading(true);
+        setIsInitializing(true);
         console.log("🔐 SessionProvider: Initializing...");
-        
+
         const authService = AuthService.getInstance();
         const userData = await authService.checkAuth();
 
         if (userData) {
           console.log("✅ SessionProvider: User found:", userData.iduser);
           setUser(userData);
-          setAuthenticated(true);
           setAppUser(userData);
         } else {
           console.log("❌ SessionProvider: No user found");
@@ -45,35 +50,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         console.error("❌ SessionProvider: Init error:", error);
       } finally {
         console.log("🏁 SessionProvider: Loading finished");
-        setIsLoading(false);
+        setIsInitializing(false);
       }
     };
 
-    initSession();
-  }, [setUser, setAuthenticated, setAppUser]);
+    void initSession();
+  }, [hydrated, setUser, setAppUser]);
 
   const logout = async () => {
     await AuthService.getInstance().logout();
   };
 
   const refresh = async () => {
-    setIsLoading(true);
+    setIsInitializing(true);
     try {
       const userData = await AuthService.getInstance().checkAuth();
       if (userData) {
         setUser(userData);
-        setAuthenticated(true);
         setAppUser(userData);
       }
     } finally {
-      setIsLoading(false);
+      setIsInitializing(false);
     }
   };
 
   const contextValue: SessionContextType = {
-    user: user || null,
+    user: user ?? null,
     isAuthenticated,
-    isLoading,
+    isLoading: isInitializing || !hydrated,
     logout,
     refresh,
   };

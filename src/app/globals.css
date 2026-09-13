@@ -182,3 +182,23 @@ body {
   --ui-button-px: 0.75rem;
   --ui-button-radius: var(--radius);
 }
+
+.rmdp-wrapper,
+.rmdp-container,
+.rmdp-input,
+.rmdp-calendar,
+.rmdp-day,
+.rmdp-header,
+.rmdp-week-day,
+.rmdp-month-picker,
+.rmdp-year-picker {
+  font-family: "B Nazanin", sans-serif !important;
+}
+
+.rmdp-wrapper {
+  direction: rtl;
+}
+
+.rmdp-input {
+  font-family: "B Nazanin", sans-serif !important;
+}

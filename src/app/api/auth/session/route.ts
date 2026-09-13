@@ -1,14 +1,15 @@
 // src/app/api/auth/session/route.ts
 import { NextResponse } from "next/server";
 import { createHmac, randomBytes } from "node:crypto";
-
+import { AUTH_SESSION_SECRET } from "@/src/core/config/env";
 const COOKIE_NAME = "sakhteman-session";
 const MAX_AGE = 60 * 60 * 24; // 24 hours
 
 function getSecret() {
-  const secret = process.env.AUTH_SESSION_SECRET;
-  if (!secret) throw new Error("AUTH_SESSION_SECRET is not configured");
-  return secret;
+  if (!AUTH_SESSION_SECRET) {
+    throw new Error("AUTH_SESSION_SECRET is not configured");
+  }
+  return AUTH_SESSION_SECRET;
 }
 
 function sign(value: string) {

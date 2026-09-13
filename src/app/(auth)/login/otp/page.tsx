@@ -1,6 +1,6 @@
 // src/app/(auth)/login/otp/page.tsx
 "use client";
-
+import { maskPhone } from "@/src/shared/phone/phone";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -151,7 +151,7 @@ export default function OtpPage() {
           <CardDescription className="text-sm">
             کد ۵ رقمی ارسال شده به شماره
             <span className="mx-1 font-medium text-foreground">
-              {phone.replace(/(\d{4})(\d{4})(\d{3})/, "$1***$2$3")}
+              {maskPhone(phone)}
             </span>
             را وارد کنید.
           </CardDescription>
