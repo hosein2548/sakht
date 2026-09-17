@@ -29,11 +29,10 @@ export interface ResidentHistory {
  * پارامترهای دریافت سوابق
  */
 export interface GetHistoryParams {
-  /** شناسه واحد */
   unitId: string;
-  
-  /** شناسه کاربر (ساکن) */
   userId: string;
+  /** نقش کاربر: مالک یا ساکن */
+  role?: "malek" | "saken";
 }
 
 /**

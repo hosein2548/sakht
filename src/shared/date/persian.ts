@@ -391,3 +391,30 @@ export function toEnglishDigits(value: string): string {
 export function normalizePersianDateInput(value: string): string {
   return toEnglishDigits(value);
 }
+
+/**
+ * نمایش زیبای تاریخ پایان
+ * - اگر تاریخ 1490/01/01 یا خالی یا "0" باشه → "تاکنون"
+ * - در غیر این صورت → خود تاریخ
+ *
+ * مثال:
+ *   formatEndDate("1490/01/01") → "تاکنون"
+ *   formatEndDate("")           → "تاکنون"
+ *   formatEndDate("0")          → "تاکنون"
+ *   formatEndDate("1404/05/10") → "1404/05/10"
+ */
+export function formatEndDate(date: string | null | undefined): string {
+  if (!date) return "تاکنون";
+
+  const trimmed = String(date).trim();
+
+  if (
+    trimmed === "" ||
+    trimmed === "0" ||
+    trimmed === "1490/01/01"
+  ) {
+    return "تاکنون";
+  }
+
+  return trimmed;
+}

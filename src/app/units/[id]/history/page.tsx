@@ -12,10 +12,9 @@ import {
   Trash2,
   RefreshCw,
 } from "lucide-react";
-
+import { getTodayPersian, formatEndDate } from "@/src/shared/date/persian";
 import { unitHistoryApi } from "@/src/features/units/api/unit-history.api";
 import { useBuildingStore } from "@/src/features/building/store/building.store";
-import { getTodayPersian } from "@/src/shared/date/persian";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
+import { useAppStore } from "@/src/core/store/app.store";
 
 // ============================================
 // Types
@@ -63,8 +63,26 @@ function HistoryContent() {
 
   const [history, setHistory] = useState<ResidentHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  
+  
+  const user = useAppStore((state) => state.user);
 
+const isManager = Boolean(
+  user?.iduser &&
+    (selectedBuilding?.idmodir === user.iduser ||
+      selectedUnit?.idmodir === user.iduser)
+);
+
+/**
+ * آیا کاربر مجاز به مشاهده سوابق این شخص است؟
+ * - مدیر ساختمان: بله
+ * - خود کاربر (userId === user.iduser): بله
+ */
+const canViewHistory = Boolean(
+  user?.iduser &&
+    (isManager || user.iduser === userId)
+);
+const [error, setError] = useState<string | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -108,15 +126,21 @@ function HistoryContent() {
   }, [unitId, userId]);
 
   useEffect(() => {
-    if (unitId && userId) {
-      void loadHistory();
-    } else {
-      setIsLoading(false);
-      if (!userId) {
-        setError("شناسه کاربر مشخص نیست. لطفاً از صفحه واحد وارد شوید.");
-      }
+  if (!canViewHistory) {
+    setIsLoading(false);
+    setError("شما اجازه مشاهده سوابق این کاربر را ندارید.");
+    return;
+  }
+
+  if (unitId && userId) {
+    void loadHistory();
+  } else {
+    setIsLoading(false);
+    if (!userId) {
+      setError("شناسه کاربر مشخص نیست. لطفاً از صفحه واحد وارد شوید.");
     }
-  }, [unitId, userId, loadHistory]);
+  }
+}, [unitId, userId, loadHistory, canViewHistory]);
 
   const handleEndHistory = async () => {
     if (!selectedHistoryId) return;
@@ -158,10 +182,7 @@ function HistoryContent() {
     setIsDialogOpen(true);
   };
 
-  const formatDate = (date: string) => {
-    if (!date || date === "1490/01/01") return "تا کنون";
-    return date;
-  };
+  
 
   const getStatusBadge = (status: string) => {
     if (status === "active" ) {
@@ -266,11 +287,11 @@ function HistoryContent() {
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="h-4 w-4" />
-                        <span>از {formatDate(item.startDate)}</span>
+                        <span>از {item.startDate || "—"}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4" />
-                        <span>تا {formatDate(item.endDate)}</span>
+                        <span>تا {formatEndDate(item.endDate)}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Users className="h-4 w-4" />

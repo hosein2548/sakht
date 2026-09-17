@@ -13,7 +13,7 @@ import {
 } from "next/navigation";
 import { PersianDateInput } from "@/components/ui/persian-date-input";
 import Link from "next/link";
-
+import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   Edit,
@@ -55,6 +55,7 @@ import {
 import {
   getTodayPersian,
   isValidPersianDate,
+  formatEndDate,
 } from "@/src/shared/date/persian";
 
 import {
@@ -172,7 +173,7 @@ export default function UnitDetailPage() {
   const router = useRouter();
   const params = useParams();
   const unitId = params?.id as string;
-  const stateacive="1";
+  //const stateacive="1";
 
   // Store
   const user = useAppStore((state) => state.user);
@@ -269,12 +270,52 @@ export default function UnitDetailPage() {
   );
 
   // ============================================
+// Permissions - دسترسی به اطلاعات مالک/ساکن
+// ============================================
+
+/**
+ * آیا کاربر مالک این واحد است؟
+ * (بر اساس لیست owners که از API اومده)
+ */
+const isOwnerOfUnit = Boolean(
+  user?.iduser &&
+    owners.some((owner) => owner.iduser === user.iduser)
+);
+
+/**
+ * آیا کاربر ساکن این واحد است؟
+ * (بر اساس لیست tenants که از API اومده)
+ */
+const isResidentOfUnit = Boolean(
+  user?.iduser &&
+    tenants.some((tenant) => tenant.iduser === user.iduser)
+);
+
+/**
+ * آیا کاربر اجازه دیدن اطلاعات مالک/ساکن رو داره؟
+ */
+const canViewPeople = isManager || isOwnerOfUnit || isResidentOfUnit;
+
+/**
+ * آیا کاربر اجازه دیدن تب مالک رو داره؟
+ * - مدیر: بله
+ * - مالک: بله
+ * - ساکن: فقط اگه مدیر یا مالک هم باشه (نه)
+ */
+const canViewOwners = isManager || isOwnerOfUnit;
+
+/**
+ * آیا کاربر اجازه دیدن تب ساکن رو داره؟
+ */
+const canViewTenants = isManager || isResidentOfUnit;
+
+  // ============================================
   // Load Data
   // ============================================
-
+const [peopleFilter, setPeopleFilter] = useState<"active" | "all">("active");
  
  const loadHistory = useCallback(async (
-  ownersList: Resident[], 
+  ownersList: Resident[],
   tenantsList: Resident[]
 ) => {
   if (!unitId) return;
@@ -282,45 +323,78 @@ export default function UnitDetailPage() {
   setIsLoadingHistory(true);
 
   try {
-    if (ownersList.length > 0) {
-      const ownerHistoryData = await unitHistoryApi.getHistory({
-        unitId,
-        userId: ownersList[0]?.iduser || "",
-      });
-      
-      // ✅ اصلاح mapping با type assertion
-      setOwnerHistory(ownerHistoryData.map((item) => ({
-        ...item,
-        iduser: ownersList[0]?.iduser || "",
-        nameuser: ownersList[0]?.nameuser || "مالک",
-        phone: ownersList[0]?.phone || "",
-        naghsh: 'مالک' as const,
-        datestart: item.startDate,
-        count: item.count,
-        status: item.status,
-        endDate: item.endDate,
-      })));
+    // ============================================
+    // سوابق همه مالکین (نه فقط اولی)
+    // ============================================
+    const allOwnerHistories: Resident[] = [];
+
+    for (const owner of ownersList) {
+      try {
+        const ownerHistoryData = await unitHistoryApi.getHistory({
+          unitId,
+          userId: owner.iduser,
+          role: "malek",
+        });
+
+        allOwnerHistories.push(
+          ...ownerHistoryData.map((item) => ({
+            ...item,
+            iduser: owner.iduser,
+            nameuser: owner.nameuser || "مالک",
+            phone: owner.phone || "",
+            naghsh: "مالک" as const,
+            datestart: item.startDate,
+            count: item.count,
+            status: item.status,
+            endDate: item.endDate,
+          }))
+        );
+      } catch (err) {
+        console.error(
+          `Load history for owner ${owner.iduser} failed:`,
+          err
+        );
+      }
     }
 
-    if (tenantsList.length > 0) {
-      const tenantHistoryData = await unitHistoryApi.getHistory({
-        unitId,
-        userId: tenantsList[0]?.iduser || "",
-      });
-      
-      // ✅ اصلاح mapping با type assertion
-      setTenantHistory(tenantHistoryData.map((item) => ({
-        ...item,
-        iduser: tenantsList[0]?.iduser || "",
-        nameuser: tenantsList[0]?.nameuser || "ساکن",
-        phone: tenantsList[0]?.phone || "",
-        naghsh: 'ساکن' as const,
-        datestart: item.startDate,
-        count: item.count,
-        status: item.status,
-        endDate: item.endDate,
-      })));
+    setOwnerHistory(allOwnerHistories);
+
+    // ============================================
+    // سوابق همه ساکنین
+    // ============================================
+    const allTenantHistories: Resident[] = [];
+
+    for (const tenant of tenantsList) {
+      try {
+        const tenantHistoryData = await unitHistoryApi.getHistory({
+          unitId,
+          userId: tenant.iduser,
+          role: "saken",
+        });
+
+        allTenantHistories.push(
+          ...tenantHistoryData.map((item) => ({
+            ...item,
+            iduser: tenant.iduser,
+            nameuser: tenant.nameuser || "ساکن",
+            phone: tenant.phone || "",
+            naghsh: "ساکن" as const,
+            datestart: item.startDate,
+            count: item.count,
+            status: item.status,
+            endDate: item.endDate,
+          }))
+        );
+      } catch (err) {
+        console.error(
+          `Load history for tenant ${tenant.iduser} failed:`,
+          err
+        );
+      }
     }
+
+    setTenantHistory(allTenantHistories);
+
   } catch (error) {
     console.error("Load history error:", error);
   } finally {
@@ -335,9 +409,11 @@ export default function UnitDetailPage() {
   setPeopleError(null);
 
   try {
-    const result = await unitPeopleApi.getByUnit(unitId,stateacive);
+    // مقدار stateactive بر اساس فیلتر انتخابی
+    const stateactive = peopleFilter === "active" ? "1" : "0";
+
+    const result = await unitPeopleApi.getByUnit(unitId, stateactive);
     
-    // ✅ استفاده از filter با type assertion
     const ownersList = result.filter((p): p is Resident & { naghsh: 'مالک' } => 
       p.naghsh === 'مالک'
     );
@@ -350,6 +426,9 @@ export default function UnitDetailPage() {
 
     if (ownersList.length > 0 || tenantsList.length > 0) {
       await loadHistory(ownersList, tenantsList);
+    } else {
+      setOwnerHistory([]);
+      setTenantHistory([]);
     }
   } catch (err) {
     console.error("Load people error:", err);
@@ -357,16 +436,27 @@ export default function UnitDetailPage() {
   } finally {
     setIsLoadingPeople(false);
   }
-}, [unitId, loadHistory]);
+}, [unitId, loadHistory, peopleFilter]);
 
  
 
-  useEffect(() => {
-    if (unitId) {
-      void loadUnitDetail();
-      void loadPeople();
-    }
-  }, [unitId, loadUnitDetail, loadPeople]);
+  // ============================================
+// بارگذاری اطلاعات واحد - فقط با تغییر unitId
+// ============================================
+useEffect(() => {
+  if (unitId) {
+    void loadUnitDetail();
+  }
+}, [unitId, loadUnitDetail]);
+
+// ============================================
+// بارگذاری لیست مالک/ساکن - با تغییر unitId یا فیلتر
+// ============================================
+useEffect(() => {
+  if (unitId) {
+    void loadPeople();
+  }
+}, [unitId, loadPeople]);
 
   // ============================================
   // Edit Unit
@@ -1027,35 +1117,77 @@ export default function UnitDetailPage() {
       </Card>
 
       {/* ============================================
-          Owners & Tenants
-          ============================================ */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            مالک و ساکنان
-          </CardTitle>
-          <CardDescription>
-            اطلاعات مالک و ساکنان این واحد
-          </CardDescription>
-        </CardHeader>
+    Owners & Tenants
+    ============================================ */}
+{canViewPeople ? (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <Users className="h-5 w-5" />
+        مالک و ساکنان
+      </CardTitle>
+      <CardDescription>
+        اطلاعات مالک و ساکنان این واحد
+      </CardDescription>
+    </CardHeader>
 
-        <CardContent>
-          <Tabs defaultValue="owners" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="owners">
-                مالک ({owners.length})
-              </TabsTrigger>
-              <TabsTrigger value="tenants">
-                ساکنان ({tenants.length})
-              </TabsTrigger>
-            </TabsList>
+    <CardContent>
+      <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border p-1">
+    <button
+      type="button"
+      onClick={() => setPeopleFilter("active")}
+      className={[
+        "rounded-lg px-4 py-2 text-sm font-medium transition",
+        peopleFilter === "active"
+          ? "bg-primary text-primary-foreground"
+          : "hover:bg-muted",
+      ].join(" ")}
+    >
+      مالک/ساکن فعلی
+    </button>
+    <button
+      type="button"
+      onClick={() => setPeopleFilter("all")}
+      className={[
+        "rounded-lg px-4 py-2 text-sm font-medium transition",
+        peopleFilter === "all"
+          ? "bg-primary text-primary-foreground"
+          : "hover:bg-muted",
+      ].join(" ")}
+    >
+      همه مالکین و ساکنین
+    </button>
+  </div>
+      <Tabs
+        defaultValue={canViewOwners ? "owners" : "tenants"}
+        className="w-full"
+      >
+        <TabsList
+          className={cn(
+            "grid w-full",
+            canViewOwners && canViewTenants
+              ? "grid-cols-2"
+              : "grid-cols-1"
+          )}
+        >
+          {canViewOwners && (
+            <TabsTrigger value="owners">
+              مالک ({owners.length})
+            </TabsTrigger>
+          )}
+          {canViewTenants && (
+            <TabsTrigger value="tenants">
+              ساکنان ({tenants.length})
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-            {/* ============================================
-                Owners Tab
-                ============================================ */}
-            <TabsContent value="owners" className="mt-4 space-y-4">
-              {isLoadingPeople ? (
+        {/* ============================================
+            Owners Tab
+            ============================================ */}
+        {canViewOwners && (
+          <TabsContent value="owners" className="mt-4 space-y-4">
+            {isLoadingPeople ? (
                 <div className="space-y-3">
                   <Skeleton className="h-24 w-full" />
                   <Skeleton className="h-24 w-full" />
@@ -1104,15 +1236,18 @@ export default function UnitDetailPage() {
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => goToHistory(owner.iduser)}
-                        >
-                          <Clock className="h-4 w-4" />
-                          سوابق
-                        </Button>
+                        {/* سوابق فقط برای مدیر یا خود مالک */}
+{(isManager || user?.iduser === owner.iduser) && (
+  <Button
+    variant="ghost"
+    size="sm"
+    className="gap-1.5"
+    onClick={() => goToHistory(owner.iduser)}
+  >
+    <Clock className="h-4 w-4" />
+    سوابق
+  </Button>
+)}
                       </div>
                     </div>
 
@@ -1163,13 +1298,73 @@ export default function UnitDetailPage() {
                   افزودن مالک
                 </Button>
               )}
-            </TabsContent>
+          {/* ============================================
+    سوابق مالکین
+    ============================================ */}
+{ownerHistory.length > 0 && (
+  <div className="mt-4 border-t pt-4">
+    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+      <Clock className="h-4 w-4" />
+      سوابق مالکیت
+    </h4>
 
-            {/* ============================================
-                Tenants Tab
-                ============================================ */}
-            <TabsContent value="tenants" className="mt-4 space-y-4">
-              {isLoadingPeople ? (
+    {isLoadingHistory ? (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {ownerHistory.map((item, index) => (
+          <div
+            key={`owner-history-${item.idnaghsh}-${index}`}
+            className="rounded-lg border p-3 text-sm"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">
+                {item.nameuser || "مالک"}
+              </span>
+              <Badge
+                variant={item.status === "active" ? "default" : "secondary"}
+                className={item.status === "active" ? "bg-success" : ""}
+              >
+                {item.status === "active" ? "فعال" : "پایان یافته"}
+              </Badge>
+            </div>
+
+            <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+              <span>از {item.datestart || "—"}</span>
+              <span>تا {formatEndDate(item.endDate)}</span>
+              <span>تعداد: {item.count}</span>
+            </div>
+
+            {(isManager || user?.iduser === item.iduser) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 gap-1.5 text-xs"
+                onClick={() => goToHistory(item.iduser)}
+              >
+                <Eye className="h-3 w-3" />
+                مشاهده جزئیات
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+          </TabsContent>
+          
+        )}
+
+        {/* ============================================
+            Tenants Tab
+            ============================================ */}
+        {canViewTenants && (
+          <TabsContent value="tenants" className="mt-4 space-y-4">
+            {isLoadingPeople ? (
                 <div className="space-y-3">
                   <Skeleton className="h-32 w-full" />
                   <Skeleton className="h-32 w-full" />
@@ -1222,15 +1417,18 @@ export default function UnitDetailPage() {
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => goToHistory(tenant.iduser)}
-                        >
-                          <Clock className="h-4 w-4" />
-                          سوابق
-                        </Button>
+                        {/* سوابق فقط برای مدیر یا خود ساکن */}
+{(isManager || user?.iduser === tenant.iduser) && (
+  <Button
+    variant="ghost"
+    size="sm"
+    className="gap-1.5"
+    onClick={() => goToHistory(tenant.iduser)}
+  >
+    <Clock className="h-4 w-4" />
+    سوابق
+  </Button>
+)}
                       </div>
                     </div>
 
@@ -1291,127 +1489,88 @@ export default function UnitDetailPage() {
                   افزودن ساکن
                 </Button>
               )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              {/* ============================================
+    سوابق ساکنین
+    ============================================ */}
+{tenantHistory.length > 0 && (
+  <div className="mt-4 border-t pt-4">
+    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+      <Clock className="h-4 w-4" />
+      سوابق سکونت
+    </h4>
+
+    {isLoadingHistory ? (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {tenantHistory.map((item, index) => (
+          <div
+            key={`tenant-history-${item.idnaghsh}-${index}`}
+            className="rounded-lg border p-3 text-sm"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">
+                {item.nameuser || "ساکن"}
+              </span>
+              <Badge
+                variant={item.status === "active" ? "default" : "secondary"}
+                className={item.status === "active" ? "bg-success" : ""}
+              >
+                {item.status === "active" ? "فعال" : "پایان یافته"}
+              </Badge>
+            </div>
+
+            <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+              <span>از {item.datestart || "—"}</span>
+              <span>تا {formatEndDate(item.endDate)}</span>
+              <span>تعداد نفرات: {item.count}</span>
+            </div>
+
+            {(isManager || user?.iduser === item.iduser) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 gap-1.5 text-xs"
+                onClick={() => goToHistory(item.iduser)}
+              >
+                <Eye className="h-3 w-3" />
+                مشاهده جزئیات
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+          </TabsContent>
+        )}
+      </Tabs>
+    </CardContent>
+  </Card>
+) : (
+  <Card>
+    <CardContent className="flex min-h-40 flex-col items-center justify-center gap-3 p-8 text-center">
+      <AlertCircle className="h-10 w-10 text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">
+        اطلاعات مالک و ساکنان این واحد برای شما قابل مشاهده نیست.
+      </p>
+    </CardContent>
+  </Card>
+)}
+
+
+
+
+      
 
       {/* ============================================
           History Section - سوابق
           ============================================ */}
-      {(ownerHistory.length > 0 || tenantHistory.length > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              سوابق سکونت
-            </CardTitle>
-            <CardDescription>
-              سوابق سکونت مالک و ساکنان این واحد
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoadingHistory ? (
-              <div className="space-y-3">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
-              </div>
-            ) : (
-              <>
-                {/* سوابق مالک */}
-                {ownerHistory.length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold text-muted-foreground">
-                      سوابق مالک
-                    </h4>
-                    <div className="space-y-2">
-                      {ownerHistory.map((item) => (
-                        <div
-                          key={item.idnaghsh}
-                          className="rounded-lg border p-3 text-sm"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">
-                              {item.nameuser || "مالک"}
-                            </span>
-                            <Badge
-                              variant={item.status === 'active' ? 'default' : 'secondary'}
-                              className={item.status === 'active' ? 'bg-success' : ''}
-                            >
-                              {item.status === 'active' ? 'فعال' : 'پایان یافته'}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-                            <span>از {item.datestart}</span>
-                            <span>تا {item.endDate || "تا کنون"}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            تعداد نفرات: {item.count}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 gap-1.5 text-xs"
-                            onClick={() => goToHistory(item.iduser)}
-                          >
-                            <Eye className="h-3 w-3" />
-                            مشاهده جزئیات
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* سوابق ساکن */}
-                {tenantHistory.length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-semibold text-muted-foreground">
-                      سوابق ساکن
-                    </h4>
-                    <div className="space-y-2">
-                      {tenantHistory.map((item) => (
-                        <div
-                          key={item.idnaghsh}
-                          className="rounded-lg border p-3 text-sm"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">
-                              {item.nameuser || "ساکن"}
-                            </span>
-                            <Badge
-                              variant={item.status === 'active' ? 'default' : 'secondary'}
-                              className={item.status === 'active' ? 'bg-success' : ''}
-                            >
-                              {item.status === 'active' ? 'فعال' : 'پایان یافته'}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-                            <span>از {item.datestart}</span>
-                            <span>تا {item.endDate || "تا کنون"}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            تعداد نفرات: {item.count}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 gap-1.5 text-xs"
-                            onClick={() => goToHistory(item.iduser)}
-                          >
-                            <Eye className="h-3 w-3" />
-                            مشاهده جزئیات
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      
 
       {/* ============================================
           Delete Dialog
@@ -1556,13 +1715,13 @@ export default function UnitDetailPage() {
             {editTenantDialog.type === 'date' && (
                <PersianDateInput
     label="تاریخ شروع سکونت"
-    value={editOwnerDialog.date}
+    value={editTenantDialog.date}
     onChange={(value) => {
-      setEditOwnerDialog((prev) => ({
+      setEditTenantDialog((prev) => ({
         ...prev,
         date: value,
       }));
-      setEditOwnerError(null);
+      setEditTenantError(null);
     }}
   />
             )}
@@ -1589,11 +1748,11 @@ export default function UnitDetailPage() {
     label="تاریخ شروع با این تعداد نفرات"
     value={editOwnerDialog.date}
     onChange={(value) => {
-      setEditOwnerDialog((prev) => ({
+      setEditTenantDialog((prev) => ({
         ...prev,
         date: value,
       }));
-      setEditOwnerError(null);
+      setEditTenantError(null);
     }}
   />
               </div>
@@ -1799,18 +1958,17 @@ export default function UnitDetailPage() {
             </div>
 
             <div className="space-y-2">
-               <PersianDateInput
-    label="تاریخ شروع "
-    value={editOwnerDialog.date}
-    onChange={(value) => {
-      setEditOwnerDialog((prev) => ({
-        ...prev,
-        date: value,
-      }));
-      setEditOwnerError(null);
-    }}
-  />
-              
+              <PersianDateInput
+  label="تاریخ شروع"
+  value={addDate}
+  onChange={(value) => {
+    setAddDate(value);
+    setAddError(null);
+  }}
+  error={deleteError ?? undefined}
+  required
+/>
+                   
             </div>
 
             {addPersonType === 'saken' && (

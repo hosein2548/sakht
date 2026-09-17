@@ -84,17 +84,24 @@ export const unitHistoryApi = {
    * دریافت سوابق سکونت یک فرد در یک واحد
    */
   async getHistory(params: GetHistoryParams): Promise<ResidentHistory[]> {
-    console.log("🔍 Getting history with params:", params);
+  console.log("🔍 Getting history with params:", params);
 
-    try {
-      const response = await apiClient.post<string>("/vahed.php", {
-        idv: params.unitId, // شناسه واحد
-        idu: params.userId, // شناسه کاربر (ساکن یا مالک)
-        // ✅ اصلاح: همیشه "saken" برای دریافت سوابق ساکن
-        naghsh: "saken",
-        // ✅ اصلاح: statephp درست
-        statephp: "showsavabegh_saken",
-      });
+  // نقش پیش‌فرض: ساکن
+  const role = params.role ?? "saken";
+
+  // انتخاب statephp بر اساس نقش
+  const statephp =
+    role === "malek"
+      ? "showsavabegh_malek"
+      : "showsavabegh_saken";
+
+  try {
+    const response = await apiClient.post<string>("/vahed.php", {
+      idv: params.unitId,
+      idu: params.userId,
+      naghsh: role,
+      statephp,
+    });
 
       const raw = String(response.data ?? "");
       console.log("📡 Server response for history:", raw);

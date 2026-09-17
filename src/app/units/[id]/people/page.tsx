@@ -336,8 +336,8 @@ export default function UnitPeoplePage() {
 
       const phoneValidation = validatePhone(phone);
 if (!phoneValidation.valid) {
-  
-  return(phoneValidation.message);
+  setActionMessage(phoneValidation.message);
+  return;
 }
 
       // if (
