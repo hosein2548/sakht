@@ -3,7 +3,7 @@ import axios from "axios";
 
 export const apiClient = axios.create({
   baseURL: "/api/php",
-  timeout: 15000,
+  timeout: 60000,
   headers: {
     "Content-Type": "application/json",
     Accept: "text/plain, application/json",

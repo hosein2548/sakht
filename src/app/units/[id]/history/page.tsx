@@ -92,38 +92,42 @@ const [error, setError] = useState<string | null>(null);
   
 
   const loadHistory = useCallback(async () => {
-    console.log("🔍 Loading history for:", { unitId, userId });
+  console.log("🔍 Loading history for:", { unitId, userId });
 
-    if (!unitId) {
-      setError("شناسه واحد موجود نیست.");
-      setIsLoading(false);
-      return;
-    }
+  if (!unitId) {
+    setError("شناسه واحد موجود نیست.");
+    setIsLoading(false);
+    return;
+  }
 
-    if (!userId) {
-      setError("شناسه کاربر مشخص نیست.");
-      setIsLoading(false);
-      return;
-    }
+  if (!userId) {
+    setError("شناسه کاربر مشخص نیست.");
+    setIsLoading(false);
+    return;
+  }
 
-    setIsLoading(true);
-    setError(null);
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      const result = await unitHistoryApi.getHistory({
-        unitId,
-        userId,
-      });
+  try {
+    // ✅ تشخیص نقش از روی URL (اگه لازمه)
+    const role = searchParams.get("role") as "malek" | "saken" | null;
 
-      console.log("✅ History result:", result);
-      setHistory(result);
-    } catch (err) {
-      console.error("❌ Load history error:", err);
-      setError("دریافت سوابق با خطا مواجه شد.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [unitId, userId]);
+    const result = await unitHistoryApi.getHistory({
+      unitId,
+      userId,
+      role: role ?? undefined,
+    });
+
+    console.log("✅ History result:", result);
+    setHistory(result);
+  } catch (err) {
+    console.error("❌ Load history error:", err);
+    setError("دریافت سوابق با خطا مواجه شد.");
+  } finally {
+    setIsLoading(false);
+  }
+}, [unitId, userId, searchParams]);
 
   useEffect(() => {
   if (!canViewHistory) {

@@ -8,58 +8,66 @@ import type {
   HistoryResponse,
 } from "../types/unit-history.types";
 
-/**
- * تبدیل پاسخ سرور به آبجکت سابقه
- */
-function mapHistoryItem(item: Record<string, unknown>): ResidentHistory {
+// ============================================
+// Helper: تبدیل پاسخ سرور به ResidentHistory
+// ============================================
+function mapHistoryItem(
+  item: Record<string, unknown>,
+  role: "malek" | "saken"
+): ResidentHistory {
   const startDate = String(item.startdate ?? item.startDate ?? "");
   const endDate = String(item.enddate ?? item.endDate ?? "");
 
-  // در فلاتر: اگر enddate === "1450/01/01" باشه، یعنی تا کنون
-  const isActive = endDate === "1490/01/01" || endDate === "" || endDate === "0";
+  const isActive =
+    endDate === "1490/01/01" ||
+    endDate === "" ||
+    endDate === "0";
 
   return {
     idvahed: String(item.idvahed ?? item.idv ?? ""),
     idnaghsh: String(item.idnaghsh ?? item.id ?? ""),
+    iduser: String(item.iduser ?? item.idu ?? ""),
+
     startDate: startDate,
     endDate: isActive ? "" : endDate,
     count: String(item.count ?? item.countnafar ?? "0"),
     status: isActive ? "active" : "ended",
+
+    // ⚠️ اینا رو از سوابق نمی‌تونیم داشته باشیم
+    nameuser: String(item.nameuser ?? ""),
+    phone: String(item.phone ?? ""),
+
+    naghsh: role === "malek" ? "مالک" : "ساکن",
   };
 }
 
-/**
- * پارس کردن پاسخ سرور
- */
-function parseHistoryResponse(raw: string): ResidentHistory[] {
+// ============================================
+// Helper: پارس پاسخ
+// ============================================
+function parseHistoryResponse(
+  raw: string,
+  role: "malek" | "saken"
+): ResidentHistory[] {
   console.log("📜 Raw history response:", raw);
 
-  // اگر پاسخ "no" باشه، یعنی هیچ داده‌ای وجود نداره
   if (raw === "no" || raw === "" || raw === "null") {
     console.log("📭 No history data found");
     return [];
   }
 
-  // اگر پاسخ با "ok" شروع نشده باشه، خطا
   if (!raw.startsWith("ok")) {
     console.warn("⚠️ Unexpected response format:", raw);
     return [];
   }
 
-  // استخراج JSON از پاسخ
   const jsonStart = raw.indexOf("[");
   if (jsonStart === -1) {
     console.warn("⚠️ No JSON array found in response:", raw);
-    if (raw === "ok") {
-      return [];
-    }
     return [];
   }
 
   try {
     const jsonText = raw.substring(jsonStart);
-    console.log("📄 Extracted JSON:", jsonText);
-
     const data = JSON.parse(jsonText);
 
     if (!Array.isArray(data)) {
@@ -69,7 +77,7 @@ function parseHistoryResponse(raw: string): ResidentHistory[] {
 
     console.log(`✅ Found ${data.length} history records`);
 
-    const result = data.map(mapHistoryItem);
+    const result = data.map((item) => mapHistoryItem(item, role));
     console.log("📋 Mapped history:", result);
 
     return result;
@@ -79,17 +87,19 @@ function parseHistoryResponse(raw: string): ResidentHistory[] {
   }
 }
 
+// ============================================
+// API
+// ============================================
 export const unitHistoryApi = {
   /**
-   * دریافت سوابق سکونت یک فرد در یک واحد
+   * دریافت سوابق سکونت/مالکیت یک واحد
+   * API همه سوابق رو یکجا برمی‌گردونه (نیازی به userId نیست)
    */
   async getHistory(params: GetHistoryParams): Promise<ResidentHistory[]> {
   console.log("🔍 Getting history with params:", params);
 
-  // نقش پیش‌فرض: ساکن
   const role = params.role ?? "saken";
 
-  // انتخاب statephp بر اساس نقش
   const statephp =
     role === "malek"
       ? "showsavabegh_malek"
@@ -98,28 +108,28 @@ export const unitHistoryApi = {
   try {
     const response = await apiClient.post<string>("/vahed.php", {
       idv: params.unitId,
-      idu: params.userId,
+      idu: params.userId,  // ✅ userId برگشت
       naghsh: role,
       statephp,
     });
 
-      const raw = String(response.data ?? "");
-      console.log("📡 Server response for history:", raw);
+    const raw = String(response.data ?? "");
+    console.log("📡 Server response for history:", raw);
 
-      if (!raw || raw === "null") {
-        console.log("📭 Empty response from server");
-        return [];
-      }
-
-      return parseHistoryResponse(raw);
-    } catch (error) {
-      console.error("❌ Get history error:", error);
+    if (!raw || raw === "null") {
+      console.log("📭 Empty response from server");
       return [];
     }
-  },
+
+    return parseHistoryResponse(raw, role);
+  } catch (error) {
+    console.error("❌ Get history error:", error);
+    return [];
+  }
+},
 
   /**
-   * پایان دادن به یک دوره سکونت
+   * پایان دادن به یک دوره
    */
   async endHistory(params: DeleteHistoryParams): Promise<HistoryResponse> {
     console.log("🗑️ Ending history with params:", params);
@@ -137,12 +147,12 @@ export const unitHistoryApi = {
       if (raw.startsWith("ok")) {
         return {
           success: true,
-          message: "دوره سکونت با موفقیت پایان یافت.",
+          message: "دوره با موفقیت پایان یافت.",
         };
       }
 
       if (raw === "no" || raw.startsWith("no")) {
-        const message = raw === "no" ? "خطا در پایان سکونت." : raw.substring(2);
+        const message = raw === "no" ? "خطا در پایان دوره." : raw.substring(2);
         return {
           success: false,
           message,

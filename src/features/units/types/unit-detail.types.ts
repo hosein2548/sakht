@@ -41,6 +41,6 @@ export interface Resident {
   datestart: string;
   count: string;
   naghsh: 'مالک' | 'ساکن' | string;
-  status?: 'active' | 'ended' | 'pending';
+  /** تاریخ پایان: 1490/01/01 یعنی فعال */
   endDate?: string;
 }

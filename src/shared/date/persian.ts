@@ -418,3 +418,14 @@ export function formatEndDate(date: string | null | undefined): string {
 
   return trimmed;
 }
+export function isEndDateActive(endDate: string | null | undefined): boolean {
+  if (!endDate) return true;
+
+  const trimmed = String(endDate).trim();
+
+  return (
+    trimmed === "" ||
+    trimmed === "0" ||
+    trimmed === "1490/01/01"
+  );
+}

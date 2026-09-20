@@ -11,9 +11,11 @@ import {
   useRouter,
   useParams,
 } from "next/navigation";
+
 import { PersianDateInput } from "@/components/ui/persian-date-input";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
 import {
   ArrowRight,
   Edit,
@@ -35,7 +37,6 @@ import {
   Plus,
   AlertCircle,
   CheckCircle,
-  Pencil,
   UserRound,
   CalendarDays,
 } from "lucide-react";
@@ -54,13 +55,17 @@ import {
 
 import {
   getTodayPersian,
-  isValidPersianDate,
   formatEndDate,
+  isEndDateActive,
 } from "@/src/shared/date/persian";
 
 import {
-  unitHistoryApi,
-} from "@/src/features/units/api/unit-history.api";
+  unitPeopleApi,
+} from "@/src/features/units/api/unit-people.api";
+
+import type {
+  Resident,
+} from "@/src/features/units/types/unit-detail.types";
 
 import {
   Button,
@@ -115,8 +120,6 @@ import {
   Skeleton,
 } from "@/components/ui/skeleton";
 
- import type { Resident } from "@/src/features/units/types/unit-detail.types";
- import { unitPeopleApi } from "@/src/features/units/api/unit-people.api";
 // ============================================
 // Types
 // ============================================
@@ -135,27 +138,17 @@ interface UnitDetail {
   dateFrom: string;
 }
 
-// interface Resident {
-//   idnaghsh: string;
-//   iduser: string;
-//   nameuser: string;
-//   phone: string;
-//   datestart: string;
-//   count: string;
-//   naghsh: 'malek' | 'saken';
-//   status?: 'active' | 'ended';
-//   endDate?: string;
-// }
+type EditOwnerDialogType = 'phone' | 'date' | 'endDate' | null;
 
-// ============================================
-// Dialog Types for Tenant Edit
-// ============================================
+interface EditOwnerData {
+  type: EditOwnerDialogType;
+  owner: Resident | null;
+  phone: string;
+  date: string;
+  endDate: string;
+}
 
-type EditTenantDialogType = 
-  | 'phone'
-  | 'date'
-  | 'count'
-  | null;
+type EditTenantDialogType = 'phone' | 'date' | 'count' | 'endDate' | null;
 
 interface EditTenantData {
   type: EditTenantDialogType;
@@ -163,6 +156,7 @@ interface EditTenantData {
   phone: string;
   date: string;
   count: string;
+  endDate: string;
 }
 
 // ============================================
@@ -173,44 +167,75 @@ export default function UnitDetailPage() {
   const router = useRouter();
   const params = useParams();
   const unitId = params?.id as string;
-  //const stateacive="1";
 
+  // ============================================
   // Store
+  // ============================================
   const user = useAppStore((state) => state.user);
   const selectedBuilding = useBuildingStore((state) => state.selectedBuilding);
   const selectedUnit = useBuildingStore((state) => state.selectedUnit);
 
+  // ============================================
   // State - Unit Detail
+  // ============================================
   const [unitDetail, setUnitDetail] = useState<UnitDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ============================================
   // State - People
-  const [owners, setOwners] = useState<Resident[]>([]);
-  const [tenants, setTenants] = useState<Resident[]>([]);
+  // ============================================
+  const [allOwners, setAllOwners] = useState<Resident[]>([]);
+  const [allTenants, setAllTenants] = useState<Resident[]>([]);
   const [isLoadingPeople, setIsLoadingPeople] = useState(true);
   const [peopleError, setPeopleError] = useState<string | null>(null);
 
-  // State - History
-  const [ownerHistory, setOwnerHistory] = useState<Resident[]>([]);
-  const [tenantHistory, setTenantHistory] = useState<Resident[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  // ============================================
+  // State - Filter (localStorage)
+  // ============================================
+  const PEOPLE_FILTER_KEY = `units_people_filter_${unitId}`;
 
+  const [peopleFilter, setPeopleFilter] = useState<"active" | "all">(() => {
+    if (typeof window === "undefined") return "active";
+    const saved = localStorage.getItem(PEOPLE_FILTER_KEY);
+    return saved === "all" ? "all" : "active";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!unitId) return;
+    localStorage.setItem(PEOPLE_FILTER_KEY, peopleFilter);
+  }, [peopleFilter, unitId, PEOPLE_FILTER_KEY]);
+
+  const owners = peopleFilter === "active"
+    ? allOwners.filter((p) => isEndDateActive(p.endDate))
+    : allOwners;
+
+  const tenants = peopleFilter === "active"
+    ? allTenants.filter((p) => isEndDateActive(p.endDate))
+    : allTenants;
+
+  // ============================================
   // State - Edit Unit
+  // ============================================
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<UnitDetail>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // State - Delete Dialog (برای مالک و ساکن)
+  // ============================================
+  // State - Delete Dialog
+  // ============================================
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<Resident | null>(null);
   const [deleteDate, setDeleteDate] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // ============================================
   // State - Add Dialog
+  // ============================================
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addPersonType, setAddPersonType] = useState<'malek' | 'saken'>('malek');
   const [addPhone, setAddPhone] = useState("");
@@ -219,11 +244,61 @@ export default function UnitDetailPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-   const loadUnitDetail = useCallback(async () => {
-    if (!unitId) return;
+  // ============================================
+  // State - Edit Owner Dialog
+  // ============================================
+  const [editOwnerDialog, setEditOwnerDialog] = useState<EditOwnerData>({
+    type: null,
+    owner: null,
+    phone: "",
+    date: "",
+    endDate: "",
+  });
+  const [isEditingOwner, setIsEditingOwner] = useState(false);
+  const [editOwnerError, setEditOwnerError] = useState<string | null>(null);
+  const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
 
-    setIsLoading(true);
-    setError(null);
+  // ============================================
+  // State - Edit Tenant Dialog
+  // ============================================
+  const [editTenantDialog, setEditTenantDialog] = useState<EditTenantData>({
+    type: null,
+    tenant: null,
+    phone: "",
+    date: "",
+    count: "",
+    endDate: "",
+  });
+  const [isEditingTenant, setIsEditingTenant] = useState(false);
+  const [editTenantError, setEditTenantError] = useState<string | null>(null);
+  const [editTenantSuccess, setEditTenantSuccess] = useState(false);
+
+  // ============================================
+  // Permissions
+  // ============================================
+  const isManager = Boolean(
+    user?.iduser && selectedBuilding?.idmodir === user.iduser
+  );
+
+  const isOwnerOfUnit = Boolean(
+    user?.iduser &&
+      allOwners.some((o) => o.iduser === user.iduser && isEndDateActive(o.endDate))
+  );
+
+  const isResidentOfUnit = Boolean(
+    user?.iduser &&
+      allTenants.some((t) => t.iduser === user.iduser && isEndDateActive(t.endDate))
+  );
+
+  const canViewPeople = isManager || isOwnerOfUnit || isResidentOfUnit;
+  const canViewOwners = isManager || isOwnerOfUnit;
+  const canViewTenants = isManager || isResidentOfUnit;
+
+  // ============================================
+  // Load Unit Detail
+  // ============================================
+  const loadUnitDetail = useCallback(async () => {
+    if (!unitId) return;
 
     try {
       const result = await unitDetailApi.getOne(unitId);
@@ -232,236 +307,73 @@ export default function UnitDetailPage() {
     } catch (err) {
       console.error("Load unit detail error:", err);
       setError("دریافت اطلاعات واحد با خطا مواجه شد.");
-    } finally {
-      setIsLoading(false);
     }
   }, [unitId]);
-  
-  // State - Edit Tenant (ساکن)
-  const [editTenantDialog, setEditTenantDialog] = useState<EditTenantData>({
-    type: null,
-    tenant: null,
-    phone: "",
-    date: "",
-    count: "",
-  });
-  const [isEditingTenant, setIsEditingTenant] = useState(false);
-  const [editTenantError, setEditTenantError] = useState<string | null>(null);
-  const [editTenantSuccess, setEditTenantSuccess] = useState(false);
-
-  // State - Edit Owner (مالک)
-  const [editOwnerDialog, setEditOwnerDialog] = useState<{
-    type: 'phone' | 'date' | null;
-    owner: Resident | null;
-    phone: string;
-    date: string;
-  }>({
-    type: null,
-    owner: null,
-    phone: "",
-    date: "",
-  });
-  const [isEditingOwner, setIsEditingOwner] = useState(false);
-  const [editOwnerError, setEditOwnerError] = useState<string | null>(null);
-  const [editOwnerSuccess, setEditOwnerSuccess] = useState(false);
-
-  const isManager = Boolean(
-    user?.iduser && selectedBuilding?.idmodir === user.iduser
-  );
 
   // ============================================
-// Permissions - دسترسی به اطلاعات مالک/ساکن
-// ============================================
-
-/**
- * آیا کاربر مالک این واحد است؟
- * (بر اساس لیست owners که از API اومده)
- */
-const isOwnerOfUnit = Boolean(
-  user?.iduser &&
-    owners.some((owner) => owner.iduser === user.iduser)
-);
-
-/**
- * آیا کاربر ساکن این واحد است؟
- * (بر اساس لیست tenants که از API اومده)
- */
-const isResidentOfUnit = Boolean(
-  user?.iduser &&
-    tenants.some((tenant) => tenant.iduser === user.iduser)
-);
-
-/**
- * آیا کاربر اجازه دیدن اطلاعات مالک/ساکن رو داره؟
- */
-const canViewPeople = isManager || isOwnerOfUnit || isResidentOfUnit;
-
-/**
- * آیا کاربر اجازه دیدن تب مالک رو داره؟
- * - مدیر: بله
- * - مالک: بله
- * - ساکن: فقط اگه مدیر یا مالک هم باشه (نه)
- */
-const canViewOwners = isManager || isOwnerOfUnit;
-
-/**
- * آیا کاربر اجازه دیدن تب ساکن رو داره؟
- */
-const canViewTenants = isManager || isResidentOfUnit;
-
+  // Load People
   // ============================================
-  // Load Data
-  // ============================================
-const [peopleFilter, setPeopleFilter] = useState<"active" | "all">("active");
- 
- const loadHistory = useCallback(async (
-  ownersList: Resident[],
-  tenantsList: Resident[]
-) => {
-  if (!unitId) return;
-
-  setIsLoadingHistory(true);
-
-  try {
-    // ============================================
-    // سوابق همه مالکین (نه فقط اولی)
-    // ============================================
-    const allOwnerHistories: Resident[] = [];
-
-    for (const owner of ownersList) {
-      try {
-        const ownerHistoryData = await unitHistoryApi.getHistory({
-          unitId,
-          userId: owner.iduser,
-          role: "malek",
-        });
-
-        allOwnerHistories.push(
-          ...ownerHistoryData.map((item) => ({
-            ...item,
-            iduser: owner.iduser,
-            nameuser: owner.nameuser || "مالک",
-            phone: owner.phone || "",
-            naghsh: "مالک" as const,
-            datestart: item.startDate,
-            count: item.count,
-            status: item.status,
-            endDate: item.endDate,
-          }))
-        );
-      } catch (err) {
-        console.error(
-          `Load history for owner ${owner.iduser} failed:`,
-          err
-        );
-      }
-    }
-
-    setOwnerHistory(allOwnerHistories);
-
-    // ============================================
-    // سوابق همه ساکنین
-    // ============================================
-    const allTenantHistories: Resident[] = [];
-
-    for (const tenant of tenantsList) {
-      try {
-        const tenantHistoryData = await unitHistoryApi.getHistory({
-          unitId,
-          userId: tenant.iduser,
-          role: "saken",
-        });
-
-        allTenantHistories.push(
-          ...tenantHistoryData.map((item) => ({
-            ...item,
-            iduser: tenant.iduser,
-            nameuser: tenant.nameuser || "ساکن",
-            phone: tenant.phone || "",
-            naghsh: "ساکن" as const,
-            datestart: item.startDate,
-            count: item.count,
-            status: item.status,
-            endDate: item.endDate,
-          }))
-        );
-      } catch (err) {
-        console.error(
-          `Load history for tenant ${tenant.iduser} failed:`,
-          err
-        );
-      }
-    }
-
-    setTenantHistory(allTenantHistories);
-
-  } catch (error) {
-    console.error("Load history error:", error);
-  } finally {
-    setIsLoadingHistory(false);
-  }
-}, [unitId]);
-
   const loadPeople = useCallback(async () => {
-  if (!unitId) return;
+    if (!unitId) return;
 
-  setIsLoadingPeople(true);
-  setPeopleError(null);
+    try {
+      const result = await unitPeopleApi.getByUnit(unitId, "0");
 
-  try {
-    // مقدار stateactive بر اساس فیلتر انتخابی
-    const stateactive = peopleFilter === "active" ? "1" : "0";
+      const ownersList = result.filter(
+        (p): p is Resident & { naghsh: "مالک" } => p.naghsh === "مالک"
+      );
+      const tenantsList = result.filter(
+        (p): p is Resident & { naghsh: "ساکن" } => p.naghsh === "ساکن"
+      );
 
-    const result = await unitPeopleApi.getByUnit(unitId, stateactive);
-    
-    const ownersList = result.filter((p): p is Resident & { naghsh: 'مالک' } => 
-      p.naghsh === 'مالک'
-    );
-    const tenantsList = result.filter((p): p is Resident & { naghsh: 'ساکن' } => 
-      p.naghsh === 'ساکن'
-    );
-    
-    setOwners(ownersList);
-    setTenants(tenantsList);
-
-    if (ownersList.length > 0 || tenantsList.length > 0) {
-      await loadHistory(ownersList, tenantsList);
-    } else {
-      setOwnerHistory([]);
-      setTenantHistory([]);
+      setAllOwners(ownersList);
+      setAllTenants(tenantsList);
+    } catch (err) {
+      console.error("Load people error:", err);
+      setPeopleError("دریافت اطلاعات مالک و ساکن با خطا مواجه شد.");
     }
-  } catch (err) {
-    console.error("Load people error:", err);
-    setPeopleError("دریافت اطلاعات ساکنان با خطا مواجه شد.");
-  } finally {
-    setIsLoadingPeople(false);
-  }
-}, [unitId, loadHistory, peopleFilter]);
-
- 
+  }, [unitId]);
 
   // ============================================
-// بارگذاری اطلاعات واحد - فقط با تغییر unitId
-// ============================================
-useEffect(() => {
-  if (unitId) {
-    void loadUnitDetail();
-  }
-}, [unitId, loadUnitDetail]);
+  // Effects
+  // ============================================
+  useEffect(() => {
+    if (!unitId) return;
 
-// ============================================
-// بارگذاری لیست مالک/ساکن - با تغییر unitId یا فیلتر
-// ============================================
-useEffect(() => {
-  if (unitId) {
-    void loadPeople();
-  }
-}, [unitId, loadPeople]);
+    const run = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        await loadUnitDetail();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void run();
+  }, [unitId, loadUnitDetail]);
+
+  useEffect(() => {
+    if (!unitId) return;
+
+    const run = async () => {
+      setIsLoadingPeople(true);
+      setPeopleError(null);
+
+      try {
+        await loadPeople();
+      } finally {
+        setIsLoadingPeople(false);
+      }
+    };
+
+    void run();
+  }, [unitId, loadPeople]);
 
   // ============================================
   // Edit Unit
   // ============================================
-
   const handleEditChange = (field: keyof UnitDetail, value: string) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
   };
@@ -493,136 +405,15 @@ useEffect(() => {
   };
 
   // ============================================
-  // Edit Tenant
-  // ============================================
-
-  const openEditTenantPhone = (tenant: Resident) => {
-    setEditTenantDialog({
-      type: 'phone',
-      tenant,
-      phone: tenant.phone || "",
-      date: tenant.datestart || "",
-      count: tenant.count || "",
-    });
-    setEditTenantError(null);
-    setEditTenantSuccess(false);
-  };
-
-  const openEditTenantDate = (tenant: Resident) => {
-    setEditTenantDialog({
-      type: 'date',
-      tenant,
-      phone: tenant.phone || "",
-      date: tenant.datestart || "",
-      count: tenant.count || "",
-    });
-    setEditTenantError(null);
-    setEditTenantSuccess(false);
-  };
-
-  const openEditTenantCount = (tenant: Resident) => {
-    setEditTenantDialog({
-      type: 'count',
-      tenant,
-      phone: tenant.phone || "",
-      date: tenant.datestart || "",
-      count: tenant.count || "",
-    });
-    setEditTenantError(null);
-    setEditTenantSuccess(false);
-  };
-
-  const handleEditTenant = async () => {
-    const { type, tenant, phone, date, count } = editTenantDialog;
-
-    if (!tenant) return;
-
-    setIsEditingTenant(true);
-    setEditTenantError(null);
-    setEditTenantSuccess(false);
-
-    try {
-      let result;
-
-      if (type === 'phone') {
-        if (!phone || phone.length !== 11) {
-          setEditTenantError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
-          setIsEditingTenant(false);
-          return;
-        }
-
-        result = await unitPeopleApi.editTenantPhone({
-          idnaghsh: tenant.idnaghsh,
-          phone: phone,
-        });
-      } else if (type === 'date') {
-        // if (!date || date.length !== 10) {
-        //   setEditTenantError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-        //   setIsEditingTenant(false);
-        //   return;
-        // }
-
-        // if (!isValidPersianDate(date)) {
-        //   setEditTenantError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-        //   setIsEditingTenant(false);
-        //   return;
-        // }
-
-        result = await unitPeopleApi.editTenantDate({
-          idnaghsh: tenant.idnaghsh,
-          date: date,
-        });
-      } else if (type === 'count') {
-        if (!count || parseInt(count) <= 0) {
-          setEditTenantError("تعداد نفرات را به صورت صحیح وارد کنید.");
-          setIsEditingTenant(false);
-          return;
-        }
-
-        result = await unitPeopleApi.editTenantCount({
-          idnaghsh: tenant.idnaghsh,
-          count: count,
-        });
-      } else {
-        setEditTenantError("نوع ویرایش نامعتبر است.");
-        setIsEditingTenant(false);
-        return;
-      }
-
-      if (result?.success) {
-        setEditTenantSuccess(true);
-        setTimeout(() => {
-          setEditTenantDialog({
-            type: null,
-            tenant: null,
-            phone: "",
-            date: "",
-            count: "",
-          });
-          setEditTenantSuccess(false);
-          void loadPeople();
-        }, 1000);
-      } else {
-        setEditTenantError(result?.message || "ویرایش با خطا مواجه شد.");
-      }
-    } catch (err) {
-      console.error("Edit tenant error:", err);
-      setEditTenantError("ویرایش با خطا مواجه شد.");
-    } finally {
-      setIsEditingTenant(false);
-    }
-  };
-
-  // ============================================
   // Edit Owner
   // ============================================
-
   const openEditOwnerPhone = (owner: Resident) => {
     setEditOwnerDialog({
       type: 'phone',
       owner,
       phone: owner.phone || "",
       date: owner.datestart || "",
+      endDate: owner.endDate || "",
     });
     setEditOwnerError(null);
     setEditOwnerSuccess(false);
@@ -634,13 +425,26 @@ useEffect(() => {
       owner,
       phone: owner.phone || "",
       date: owner.datestart || "",
+      endDate: owner.endDate || "",
+    });
+    setEditOwnerError(null);
+    setEditOwnerSuccess(false);
+  };
+
+  const openEditOwnerEndDate = (owner: Resident) => {
+    setEditOwnerDialog({
+      type: 'endDate',
+      owner,
+      phone: owner.phone || "",
+      date: owner.datestart || "",
+      endDate: owner.endDate || "",
     });
     setEditOwnerError(null);
     setEditOwnerSuccess(false);
   };
 
   const handleEditOwner = async () => {
-    const { type, owner, phone, date } = editOwnerDialog;
+    const { type, owner, phone, date, endDate } = editOwnerDialog;
 
     if (!owner) return;
 
@@ -663,21 +467,14 @@ useEffect(() => {
           phone: phone,
         });
       } else if (type === 'date') {
-        // if (!date || date.length !== 10) {
-        //   setEditOwnerError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-        //   setIsEditingOwner(false);
-        //   return;
-        // }
-
-        // if (!isValidPersianDate(date)) {
-        //   setEditOwnerError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-        //   setIsEditingOwner(false);
-        //   return;
-        // }
-
         result = await unitPeopleApi.editOwnerDate({
           idnaghsh: owner.idnaghsh,
           date: date,
+        });
+      } else if (type === 'endDate') {
+        result = await unitPeopleApi.editPersonEndDate({
+          idnaghsh: owner.idnaghsh,
+          endDate: endDate,
         });
       } else {
         setEditOwnerError("نوع ویرایش نامعتبر است.");
@@ -693,6 +490,7 @@ useEffect(() => {
             owner: null,
             phone: "",
             date: "",
+            endDate: "",
           });
           setEditOwnerSuccess(false);
           void loadPeople();
@@ -709,21 +507,141 @@ useEffect(() => {
   };
 
   // ============================================
-  // Delete Person (Owner/Tenant)
+  // Edit Tenant
   // ============================================
+  const openEditTenantPhone = (tenant: Resident) => {
+    setEditTenantDialog({
+      type: 'phone',
+      tenant,
+      phone: tenant.phone || "",
+      date: tenant.datestart || "",
+      count: tenant.count || "",
+      endDate: tenant.endDate || "",
+    });
+    setEditTenantError(null);
+    setEditTenantSuccess(false);
+  };
 
+  const openEditTenantDate = (tenant: Resident) => {
+    setEditTenantDialog({
+      type: 'date',
+      tenant,
+      phone: tenant.phone || "",
+      date: tenant.datestart || "",
+      count: tenant.count || "",
+      endDate: tenant.endDate || "",
+    });
+    setEditTenantError(null);
+    setEditTenantSuccess(false);
+  };
+
+  const openEditTenantCount = (tenant: Resident) => {
+    setEditTenantDialog({
+      type: 'count',
+      tenant,
+      phone: tenant.phone || "",
+      date: tenant.datestart || "",
+      count: tenant.count || "",
+      endDate: tenant.endDate || "",
+    });
+    setEditTenantError(null);
+    setEditTenantSuccess(false);
+  };
+
+  const openEditTenantEndDate = (tenant: Resident) => {
+    setEditTenantDialog({
+      type: 'endDate',
+      tenant,
+      phone: tenant.phone || "",
+      date: tenant.datestart || "",
+      count: tenant.count || "",
+      endDate: tenant.endDate || "",
+    });
+    setEditTenantError(null);
+    setEditTenantSuccess(false);
+  };
+
+  const handleEditTenant = async () => {
+    const { type, tenant, phone, date, count, endDate } = editTenantDialog;
+
+    if (!tenant) return;
+
+    setIsEditingTenant(true);
+    setEditTenantError(null);
+    setEditTenantSuccess(false);
+
+    try {
+      let result;
+
+      if (type === 'phone') {
+        if (!phone || phone.length !== 11) {
+          setEditTenantError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
+          setIsEditingTenant(false);
+          return;
+        }
+
+        result = await unitPeopleApi.editTenantPhone({
+          idnaghsh: tenant.idnaghsh,
+          phone: phone,
+        });
+      } else if (type === 'date') {
+        result = await unitPeopleApi.editTenantDate({
+          idnaghsh: tenant.idnaghsh,
+          date: date,
+        });
+      } else if (type === 'count') {
+        if (!count || parseInt(count) <= 0) {
+          setEditTenantError("تعداد نفرات را به صورت صحیح وارد کنید.");
+          setIsEditingTenant(false);
+          return;
+        }
+
+        result = await unitPeopleApi.editTenantCount({
+          idnaghsh: tenant.idnaghsh,
+          count: count,
+          date: date,
+        });
+      } else if (type === 'endDate') {
+        result = await unitPeopleApi.editPersonEndDate({
+          idnaghsh: tenant.idnaghsh,
+          endDate: endDate,
+        });
+      } else {
+        setEditTenantError("نوع ویرایش نامعتبر است.");
+        setIsEditingTenant(false);
+        return;
+      }
+
+      if (result?.success) {
+        setEditTenantSuccess(true);
+        setTimeout(() => {
+          setEditTenantDialog({
+            type: null,
+            tenant: null,
+            phone: "",
+            date: "",
+            count: "",
+            endDate: "",
+          });
+          setEditTenantSuccess(false);
+          void loadPeople();
+        }, 1000);
+      } else {
+        setEditTenantError(result?.message || "ویرایش با خطا مواجه شد.");
+      }
+    } catch (err) {
+      console.error("Edit tenant error:", err);
+      setEditTenantError("ویرایش با خطا مواجه شد.");
+    } finally {
+      setIsEditingTenant(false);
+    }
+  };
+
+  // ============================================
+  // Delete Person
+  // ============================================
   const handleDeletePerson = async () => {
     if (!deleteItem) return;
-
-    // if (!deleteDate || deleteDate.length !== 10) {
-    //   setDeleteError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/15)");
-    //   return;
-    // }
-
-    // if (!isValidPersianDate(deleteDate)) {
-    //   setDeleteError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-    //   return;
-    // }
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -752,7 +670,13 @@ useEffect(() => {
 
   const openDeleteDialog = (person: Resident) => {
     setDeleteItem(person);
-    setDeleteDate(getTodayPersian());
+
+    const existingEndDate =
+      person.endDate && person.endDate !== "1490/01/01"
+        ? person.endDate
+        : getTodayPersian();
+
+    setDeleteDate(existingEndDate);
     setDeleteError(null);
     setDeleteDialogOpen(true);
   };
@@ -760,7 +684,6 @@ useEffect(() => {
   // ============================================
   // Add Person
   // ============================================
-
   const handleAddPerson = async () => {
     if (!unitId) return;
 
@@ -768,16 +691,6 @@ useEffect(() => {
       setAddError("شماره موبایل را به صورت صحیح وارد کنید (۱۱ رقم).");
       return;
     }
-
-    // if (!addDate || addDate.length !== 10) {
-    //   setAddError("تاریخ را به صورت صحیح وارد کنید (مثال: 1404/01/01).");
-    //   return;
-    // }
-
-    // if (!isValidPersianDate(addDate)) {
-    //   setAddError("تاریخ وارد شده معتبر نیست. فرمت صحیح: 1404/01/01");
-    //   return;
-    // }
 
     if (addPersonType === 'saken' && !addCount) {
       setAddError("تعداد نفرات را وارد کنید.");
@@ -825,15 +738,13 @@ useEffect(() => {
   // ============================================
   // Navigate to History
   // ============================================
-
-  const goToHistory = (userId: string) => {
-    router.push(`/units/${unitId}/history?userId=${userId}`);
+  const goToHistory = (userId: string, role: "malek" | "saken") => {
+    router.push(`/units/${unitId}/history?userId=${userId}&role=${role}`);
   };
 
   // ============================================
-  // Render
+  // Render: Loading
   // ============================================
-
   if (isLoading) {
     return (
       <div className="space-y-5 px-4 py-5">
@@ -871,11 +782,12 @@ useEffect(() => {
     );
   }
 
+  // ============================================
+  // Render
+  // ============================================
   return (
     <div dir="rtl" className="space-y-5 px-4 py-5">
-      {/* ============================================
-          Header
-          ============================================ */}
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Link
           href="/units"
@@ -944,18 +856,14 @@ useEffect(() => {
         </Alert>
       )}
 
-      {/* ============================================
-          Unit Info Card
-          ============================================ */}
+      {/* Unit Info Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Home className="h-5 w-5" />
             مشخصات واحد
           </CardTitle>
-          <CardDescription>
-            اطلاعات پایه و امکانات واحد
-          </CardDescription>
+          <CardDescription>اطلاعات پایه و امکانات واحد</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -1116,470 +1024,436 @@ useEffect(() => {
         </CardContent>
       </Card>
 
-      {/* ============================================
-    Owners & Tenants
-    ============================================ */}
-{canViewPeople ? (
-  <Card>
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2">
-        <Users className="h-5 w-5" />
-        مالک و ساکنان
-      </CardTitle>
-      <CardDescription>
-        اطلاعات مالک و ساکنان این واحد
-      </CardDescription>
-    </CardHeader>
+      {/* Owners & Tenants */}
+      {canViewPeople ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              مالک و ساکنان
+            </CardTitle>
+            <CardDescription>
+              اطلاعات مالک و ساکنان این واحد
+            </CardDescription>
+          </CardHeader>
 
-    <CardContent>
-      <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border p-1">
-    <button
-      type="button"
-      onClick={() => setPeopleFilter("active")}
-      className={[
-        "rounded-lg px-4 py-2 text-sm font-medium transition",
-        peopleFilter === "active"
-          ? "bg-primary text-primary-foreground"
-          : "hover:bg-muted",
-      ].join(" ")}
-    >
-      مالک/ساکن فعلی
-    </button>
-    <button
-      type="button"
-      onClick={() => setPeopleFilter("all")}
-      className={[
-        "rounded-lg px-4 py-2 text-sm font-medium transition",
-        peopleFilter === "all"
-          ? "bg-primary text-primary-foreground"
-          : "hover:bg-muted",
-      ].join(" ")}
-    >
-      همه مالکین و ساکنین
-    </button>
-  </div>
-      <Tabs
-        defaultValue={canViewOwners ? "owners" : "tenants"}
-        className="w-full"
-      >
-        <TabsList
-          className={cn(
-            "grid w-full",
-            canViewOwners && canViewTenants
-              ? "grid-cols-2"
-              : "grid-cols-1"
-          )}
-        >
-          {canViewOwners && (
-            <TabsTrigger value="owners">
-              مالک ({owners.length})
-            </TabsTrigger>
-          )}
-          {canViewTenants && (
-            <TabsTrigger value="tenants">
-              ساکنان ({tenants.length})
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        {/* ============================================
-            Owners Tab
-            ============================================ */}
-        {canViewOwners && (
-          <TabsContent value="owners" className="mt-4 space-y-4">
-            {isLoadingPeople ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-24 w-full" />
-                  <Skeleton className="h-24 w-full" />
-                </div>
-              ) : peopleError ? (
-                <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{peopleError}</AlertDescription>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mr-auto"
-                    onClick={() => void loadPeople()}
-                  >
-                    تلاش مجدد
-                  </Button>
-                </Alert>
-              ) : owners.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <User className="h-12 w-12 text-muted-foreground/50" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    مالکی برای این واحد ثبت نشده است.
-                  </p>
-                </div>
-              ) : (
-                owners.map((owner) => (
-                  <div
-                    key={owner.idnaghsh}
-                    className="rounded-lg border p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-semibold">
-                          {owner.nameuser || "نامشخص"}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5" />
-                            {owner.phone || "—"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5" />
-                            از {owner.datestart}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap gap-1">
-                        {/* سوابق فقط برای مدیر یا خود مالک */}
-{(isManager || user?.iduser === owner.iduser) && (
-  <Button
-    variant="ghost"
-    size="sm"
-    className="gap-1.5"
-    onClick={() => goToHistory(owner.iduser)}
-  >
-    <Clock className="h-4 w-4" />
-    سوابق
-  </Button>
-)}
-                      </div>
-                    </div>
-
-                    {isManager && (
-                      <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openEditOwnerPhone(owner)}
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                          ویرایش شماره
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openEditOwnerDate(owner)}
-                        >
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          ویرایش تاریخ
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
-                          onClick={() => openDeleteDialog(owner)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          پایان مالکیت
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-
-              {isManager && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={() => openAddDialog('malek')}
-                >
-                  <Plus className="h-4 w-4" />
-                  افزودن مالک
-                </Button>
-              )}
-          {/* ============================================
-    سوابق مالکین
-    ============================================ */}
-{ownerHistory.length > 0 && (
-  <div className="mt-4 border-t pt-4">
-    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-      <Clock className="h-4 w-4" />
-      سوابق مالکیت
-    </h4>
-
-    {isLoadingHistory ? (
-      <div className="space-y-2">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
-    ) : (
-      <div className="space-y-2">
-        {ownerHistory.map((item, index) => (
-          <div
-            key={`owner-history-${item.idnaghsh}-${index}`}
-            className="rounded-lg border p-3 text-sm"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-medium">
-                {item.nameuser || "مالک"}
-              </span>
-              <Badge
-                variant={item.status === "active" ? "default" : "secondary"}
-                className={item.status === "active" ? "bg-success" : ""}
+          <CardContent>
+            <Tabs
+              defaultValue={canViewOwners ? "owners" : "tenants"}
+              className="w-full"
+            >
+              <TabsList
+                className={cn(
+                  "grid w-full",
+                  canViewOwners && canViewTenants
+                    ? "grid-cols-2"
+                    : "grid-cols-1"
+                )}
               >
-                {item.status === "active" ? "فعال" : "پایان یافته"}
-              </Badge>
-            </div>
+                {canViewOwners && (
+                  <TabsTrigger value="owners">
+                    مالک ({owners.length})
+                  </TabsTrigger>
+                )}
+                {canViewTenants && (
+                  <TabsTrigger value="tenants">
+                    ساکنان ({tenants.length})
+                  </TabsTrigger>
+                )}
+              </TabsList>
 
-            <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
-              <span>از {item.datestart || "—"}</span>
-              <span>تا {formatEndDate(item.endDate)}</span>
-              <span>تعداد: {item.count}</span>
-            </div>
-
-            {(isManager || user?.iduser === item.iduser) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 gap-1.5 text-xs"
-                onClick={() => goToHistory(item.iduser)}
-              >
-                <Eye className="h-3 w-3" />
-                مشاهده جزئیات
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
-          </TabsContent>
-          
-        )}
-
-        {/* ============================================
-            Tenants Tab
-            ============================================ */}
-        {canViewTenants && (
-          <TabsContent value="tenants" className="mt-4 space-y-4">
-            {isLoadingPeople ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-32 w-full" />
-                  <Skeleton className="h-32 w-full" />
-                </div>
-              ) : peopleError ? (
-                <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{peopleError}</AlertDescription>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mr-auto"
-                    onClick={() => void loadPeople()}
-                  >
-                    تلاش مجدد
-                  </Button>
-                </Alert>
-              ) : tenants.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Users className="h-12 w-12 text-muted-foreground/50" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    ساکنی برای این واحد ثبت نشده است.
-                  </p>
-                </div>
-              ) : (
-                tenants.map((tenant) => (
-                  <div
-                    key={tenant.idnaghsh}
-                    className="rounded-lg border p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-semibold">
-                          {tenant.nameuser || "نامشخص"}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5" />
-                            {tenant.phone || "—"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5" />
-                            از {tenant.datestart}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3.5 w-3.5" />
-                            {tenant.count || "0"} نفر
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap gap-1">
-                        {/* سوابق فقط برای مدیر یا خود ساکن */}
-{(isManager || user?.iduser === tenant.iduser) && (
-  <Button
-    variant="ghost"
-    size="sm"
-    className="gap-1.5"
-    onClick={() => goToHistory(tenant.iduser)}
-  >
-    <Clock className="h-4 w-4" />
-    سوابق
-  </Button>
-)}
-                      </div>
-                    </div>
-
-                    {isManager && (
-                      <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openEditTenantPhone(tenant)}
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                          ویرایش شماره
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openEditTenantDate(tenant)}
-                        >
-                          <CalendarDays className="h-3.5 w-3.5" />
-                          ویرایش تاریخ
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openEditTenantCount(tenant)}
-                        >
-                          <UserRound className="h-3.5 w-3.5" />
-                          ویرایش نفرات
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
-                          onClick={() => openDeleteDialog(tenant)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          پایان سکونت
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-
-              {isManager && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={() => openAddDialog('saken')}
-                >
-                  <Plus className="h-4 w-4" />
-                  افزودن ساکن
-                </Button>
-              )}
               {/* ============================================
-    سوابق ساکنین
-    ============================================ */}
-{tenantHistory.length > 0 && (
-  <div className="mt-4 border-t pt-4">
-    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-      <Clock className="h-4 w-4" />
-      سوابق سکونت
-    </h4>
+                  Owners Tab
+                  ============================================ */}
+              {canViewOwners && (
+                <TabsContent value="owners" className="mt-4 space-y-3">
+                  {/* فیلتر */}
+                  <div className="grid grid-cols-2 gap-2 rounded-xl border p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPeopleFilter("active")}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-sm font-medium transition",
+                        peopleFilter === "active"
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                    >
+                      مالک فعلی
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeopleFilter("all")}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-sm font-medium transition",
+                        peopleFilter === "all"
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                    >
+                      همه مالکین
+                    </button>
+                  </div>
 
-    {isLoadingHistory ? (
-      <div className="space-y-2">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
-    ) : (
-      <div className="space-y-2">
-        {tenantHistory.map((item, index) => (
-          <div
-            key={`tenant-history-${item.idnaghsh}-${index}`}
-            className="rounded-lg border p-3 text-sm"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-medium">
-                {item.nameuser || "ساکن"}
-              </span>
-              <Badge
-                variant={item.status === "active" ? "default" : "secondary"}
-                className={item.status === "active" ? "bg-success" : ""}
-              >
-                {item.status === "active" ? "فعال" : "پایان یافته"}
-              </Badge>
-            </div>
+                  {/* لیست */}
+                  {isLoadingPeople ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-32 w-full" />
+                      <Skeleton className="h-32 w-full" />
+                    </div>
+                  ) : peopleError ? (
+                    <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{peopleError}</AlertDescription>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mr-auto"
+                        onClick={() => void loadPeople()}
+                      >
+                        تلاش مجدد
+                      </Button>
+                    </Alert>
+                  ) : owners.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <User className="h-12 w-12 text-muted-foreground/50" />
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        {peopleFilter === "active"
+                          ? "مالک فعلی ثبت نشده است."
+                          : "مالکی ثبت نشده است."}
+                      </p>
+                    </div>
+                  ) : (
+                    owners.map((item, index) => {
+                      const isActive = isEndDateActive(item.endDate);
 
-            <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
-              <span>از {item.datestart || "—"}</span>
-              <span>تا {formatEndDate(item.endDate)}</span>
-              <span>تعداد نفرات: {item.count}</span>
-            </div>
+                      return (
+                        <div
+                          key={`owner-${item.idnaghsh}-${index}`}
+                          className="rounded-lg border p-4"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="font-medium">
+                                {item.phone || "—"}
+                              </span>
+                            </div>
 
-            {(isManager || user?.iduser === item.iduser) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 gap-1.5 text-xs"
-                onClick={() => goToHistory(item.iduser)}
-              >
-                <Eye className="h-3 w-3" />
-                مشاهده جزئیات
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
-          </TabsContent>
-        )}
-      </Tabs>
-    </CardContent>
-  </Card>
-) : (
-  <Card>
-    <CardContent className="flex min-h-40 flex-col items-center justify-center gap-3 p-8 text-center">
-      <AlertCircle className="h-10 w-10 text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">
-        اطلاعات مالک و ساکنان این واحد برای شما قابل مشاهده نیست.
-      </p>
-    </CardContent>
-  </Card>
-)}
+                            {item.nameuser && item.nameuser.trim() !== "" && (
+                              <div className="text-sm text-muted-foreground">
+                                {item.nameuser}
+                              </div>
+                            )}
 
+                            {/* تاریخ شروع + پایان */}
+                            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                از {item.datestart || "—"}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                تا {formatEndDate(item.endDate)}
+                              </span>
+                            </div>
 
+                            <Badge
+                              variant={isActive ? "default" : "secondary"}
+                              className={isActive ? "bg-success" : ""}
+                            >
+                              {isActive ? "فعال" : "پایان یافته"}
+                            </Badge>
+                          </div>
 
+                          {/* دکمه‌ها */}
+                          <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                            
 
-      
+                            {isManager && (
+                              <>
+                                {isActive ? (
+                                  // ═══════ مالک فعال ═══════
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs"
+                                      onClick={() => openEditOwnerPhone(item)}
+                                    >
+                                      <Phone className="h-3.5 w-3.5" />
+                                      ویرایش شماره
+                                    </Button>
 
-      {/* ============================================
-          History Section - سوابق
-          ============================================ */}
-      
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs"
+                                      onClick={() => openEditOwnerDate(item)}
+                                    >
+                                      <CalendarDays className="h-3.5 w-3.5" />
+                                      ویرایش تاریخ شروع
+                                    </Button>
 
-      {/* ============================================
-          Delete Dialog
-          ============================================ */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                                      onClick={() => openDeleteDialog(item)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      پایان مالکیت
+                                    </Button>
+                                  </>
+                                ) : (
+                                  // ═══════ مالک پایان یافته ═══════
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5 text-xs"
+                                    onClick={() => openEditOwnerEndDate(item)}
+                                  >
+                                    <Clock className="h-3.5 w-3.5" />
+                                    ویرایش تاریخ پایان
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {isManager && (
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => openAddDialog("malek")}
+                    >
+                      <Plus className="h-4 w-4" />
+                      افزودن مالک
+                    </Button>
+                  )}
+                </TabsContent>
+              )}
+
+              {/* ============================================
+                  Tenants Tab
+                  ============================================ */}
+              {canViewTenants && (
+                <TabsContent value="tenants" className="mt-4 space-y-3">
+                  {/* فیلتر */}
+                  <div className="grid grid-cols-2 gap-2 rounded-xl border p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPeopleFilter("active")}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-sm font-medium transition",
+                        peopleFilter === "active"
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                    >
+                      ساکن فعلی
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeopleFilter("all")}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-sm font-medium transition",
+                        peopleFilter === "all"
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                    >
+                      همه ساکنین
+                    </button>
+                  </div>
+
+                  {/* لیست */}
+                  {isLoadingPeople ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-32 w-full" />
+                      <Skeleton className="h-32 w-full" />
+                    </div>
+                  ) : peopleError ? (
+                    <Alert className="border-destructive/30 bg-destructive/5 text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{peopleError}</AlertDescription>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mr-auto"
+                        onClick={() => void loadPeople()}
+                      >
+                        تلاش مجدد
+                      </Button>
+                    </Alert>
+                  ) : tenants.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Users className="h-12 w-12 text-muted-foreground/50" />
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        {peopleFilter === "active"
+                          ? "ساکن فعلی ثبت نشده است."
+                          : "ساکنی ثبت نشده است."}
+                      </p>
+                    </div>
+                  ) : (
+                    tenants.map((item, index) => {
+                      const isActive = isEndDateActive(item.endDate);
+
+                      return (
+                        <div
+                          key={`tenant-${item.idnaghsh}-${index}`}
+                          className="rounded-lg border p-4"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="font-medium">
+                                {item.phone || "—"}
+                              </span>
+                            </div>
+
+                            {item.nameuser && item.nameuser.trim() !== "" && (
+                              <div className="text-sm text-muted-foreground">
+                                {item.nameuser}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Users className="h-3 w-3" />
+                              <span>تعداد نفرات: {item.count || "0"}</span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                از {item.datestart || "—"}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                تا {formatEndDate(item.endDate)}
+                              </span>
+                            </div>
+
+                            <Badge
+                              variant={isActive ? "default" : "secondary"}
+                              className={isActive ? "bg-success" : ""}
+                            >
+                              {isActive ? "فعال" : "پایان یافته"}
+                            </Badge>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-xs"
+                              onClick={() => goToHistory(item.iduser, "saken")}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              مشاهده سوابق
+                            </Button>
+
+                            {isManager && (
+                              <>
+                                {isActive ? (
+                                  // ═══════ ساکن فعال ═══════
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs"
+                                      onClick={() => openEditTenantPhone(item)}
+                                    >
+                                      <Phone className="h-3.5 w-3.5" />
+                                      ویرایش شماره
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs"
+                                      onClick={() => openEditTenantDate(item)}
+                                    >
+                                      <CalendarDays className="h-3.5 w-3.5" />
+                                      ویرایش تاریخ شروع
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs"
+                                      onClick={() => openEditTenantCount(item)}
+                                    >
+                                      <UserRound className="h-3.5 w-3.5" />
+                                      ویرایش نفرات
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                                      onClick={() => openDeleteDialog(item)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      پایان سکونت
+                                    </Button>
+                                  </>
+                                ) : (
+                                  // ═══════ ساکن پایان یافته ═══════
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5 text-xs"
+                                    onClick={() => openEditTenantEndDate(item)}
+                                  >
+                                    <Clock className="h-3.5 w-3.5" />
+                                    ویرایش تاریخ پایان
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {isManager && (
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => openAddDialog("saken")}
+                    >
+                      <Plus className="h-4 w-4" />
+                      افزودن ساکن
+                    </Button>
+                  )}
+                </TabsContent>
+              )}
+            </Tabs>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex min-h-40 flex-col items-center justify-center gap-3 p-8 text-center">
+            <AlertCircle className="h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              اطلاعات مالک و ساکنان این واحد برای شما قابل مشاهده نیست.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {deleteItem?.naghsh === 'malek' ? 'پایان مالکیت' : 'پایان سکونت'}
+              {deleteItem?.naghsh === 'مالک' ? 'پایان مالکیت' : 'پایان سکونت'}
             </DialogTitle>
             <DialogDescription>
               آیا از پایان دوره این فرد اطمینان دارید؟
@@ -1590,18 +1464,17 @@ useEffect(() => {
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              
               <PersianDateInput
-  label="تاریخ پایان"
-  value={deleteDate}
-  onChange={(value) => {
-    setDeleteDate(value);
-    setDeleteError(null);
-  }}
-  error={deleteError ?? undefined}
-  required
-/>
-              
+                label="تاریخ پایان"
+                value={deleteDate}
+                onChange={(value) => {
+                  setDeleteDate(value);
+                  setDeleteError(null);
+                }}
+                error={deleteError ?? undefined}
+                required
+              />
+
               {deleteError && (
                 <p className="text-sm text-destructive">{deleteError}</p>
               )}
@@ -1610,16 +1483,18 @@ useEffect(() => {
             {deleteItem && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
                 <p>
-                  <span className="font-medium">نام:</span>{" "}
-                  {deleteItem.nameuser || "نامشخص"}
-                </p>
-                <p>
-                  <span className="font-medium">نقش:</span>{" "}
-                  {deleteItem.naghsh === 'malek' ? 'مالک' : 'ساکن'}
-                </p>
-                <p>
                   <span className="font-medium">شماره:</span>{" "}
                   {deleteItem.phone || "—"}
+                </p>
+                {deleteItem.nameuser && deleteItem.nameuser.trim() !== "" && (
+                  <p className="mt-1">
+                    <span className="font-medium">نام:</span>{" "}
+                    {deleteItem.nameuser}
+                  </p>
+                )}
+                <p className="mt-1">
+                  <span className="font-medium">نقش:</span>{" "}
+                  {deleteItem.naghsh}
                 </p>
               </div>
             )}
@@ -1656,160 +1531,7 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
-      {/* ============================================
-          Edit Tenant Dialog
-          ============================================ */}
-      <Dialog
-        open={editTenantDialog.type !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditTenantDialog({
-              type: null,
-              tenant: null,
-              phone: "",
-              date: "",
-              count: "",
-            });
-            setEditTenantError(null);
-            setEditTenantSuccess(false);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editTenantDialog.type === 'phone' && 'ویرایش شماره موبایل'}
-              {editTenantDialog.type === 'date' && 'ویرایش تاریخ شروع سکونت'}
-              {editTenantDialog.type === 'count' && 'ویرایش تعداد نفرات'}
-            </DialogTitle>
-            <DialogDescription>
-              {editTenantDialog.tenant?.nameuser || 'ساکن'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {editTenantDialog.type === 'phone' && (
-              <div className="space-y-2">
-                <Label htmlFor="editPhone">شماره موبایل</Label>
-                <Input
-                  id="editPhone"
-                  dir="ltr"
-                  type="tel"
-                  maxLength={11}
-                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-                  value={editTenantDialog.phone}
-                  onChange={(e) => {
-                    setEditTenantDialog((prev) => ({
-                      ...prev,
-                      phone: e.target.value.replace(/\D/g, ""),
-                    }));
-                    setEditTenantError(null);
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  شماره را با ۰ شروع کنید (۱۱ رقم)
-                </p>
-              </div>
-            )}
-
-            {editTenantDialog.type === 'date' && (
-               <PersianDateInput
-    label="تاریخ شروع سکونت"
-    value={editTenantDialog.date}
-    onChange={(value) => {
-      setEditTenantDialog((prev) => ({
-        ...prev,
-        date: value,
-      }));
-      setEditTenantError(null);
-    }}
-  />
-            )}
-
-            {editTenantDialog.type === 'count' && (
-              <div className="space-y-2">
-                <Label htmlFor="editCount">تعداد نفرات</Label>
-                <Input
-                  id="editCount"
-                  dir="ltr"
-                  type="number"
-                  max={99}
-                  placeholder="مثال: ۲"
-                  value={editTenantDialog.count}
-                  onChange={(e) => {
-                    setEditTenantDialog((prev) => ({
-                      ...prev,
-                      count: e.target.value.replace(/\D/g, ""),
-                    }));
-                    setEditTenantError(null);
-                  }}
-                />
-                <PersianDateInput
-    label="تاریخ شروع با این تعداد نفرات"
-    value={editOwnerDialog.date}
-    onChange={(value) => {
-      setEditTenantDialog((prev) => ({
-        ...prev,
-        date: value,
-      }));
-      setEditTenantError(null);
-    }}
-  />
-              </div>
-            )}
-
-            {editTenantError && (
-              <p className="text-sm text-destructive">{editTenantError}</p>
-            )}
-
-            {editTenantSuccess && (
-              <p className="text-sm text-success">✓ ویرایش با موفقیت انجام شد.</p>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditTenantDialog({
-                  type: null,
-                  tenant: null,
-                  phone: "",
-                  date: "",
-                  count: "",
-                });
-                setEditTenantError(null);
-                setEditTenantSuccess(false);
-              }}
-              disabled={isEditingTenant}
-            >
-              انصراف
-            </Button>
-            <Button
-              onClick={() => void handleEditTenant()}
-              disabled={isEditingTenant || editTenantSuccess}
-            >
-              {isEditingTenant ? (
-                <>
-                  <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                  در حال ذخیره...
-                </>
-              ) : editTenantSuccess ? (
-                <>
-                  <CheckCircle className="ml-2 h-4 w-4" />
-                  انجام شد
-                </>
-              ) : (
-                "ذخیره"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ============================================
-          Edit Owner Dialog
-          ============================================ */}
+      {/* Edit Owner Dialog */}
       <Dialog
         open={editOwnerDialog.type !== null}
         onOpenChange={(open) => {
@@ -1819,6 +1541,7 @@ useEffect(() => {
               owner: null,
               phone: "",
               date: "",
+              endDate: "",
             });
             setEditOwnerError(null);
             setEditOwnerSuccess(false);
@@ -1830,6 +1553,7 @@ useEffect(() => {
             <DialogTitle>
               {editOwnerDialog.type === 'phone' && 'ویرایش شماره موبایل مالک'}
               {editOwnerDialog.type === 'date' && 'ویرایش تاریخ شروع مالکیت'}
+              {editOwnerDialog.type === 'endDate' && 'ویرایش تاریخ پایان مالکیت'}
             </DialogTitle>
             <DialogDescription>
               {editOwnerDialog.owner?.nameuser || 'مالک'}
@@ -1862,18 +1586,32 @@ useEffect(() => {
             )}
 
             {editOwnerDialog.type === 'date' && (
-  <PersianDateInput
-    label="تاریخ شروع مالکیت"
-    value={editOwnerDialog.date}
-    onChange={(value) => {
-      setEditOwnerDialog((prev) => ({
-        ...prev,
-        date: value,
-      }));
-      setEditOwnerError(null);
-    }}
-  />
-)}
+              <PersianDateInput
+                label="تاریخ شروع مالکیت"
+                value={editOwnerDialog.date}
+                onChange={(value) => {
+                  setEditOwnerDialog((prev) => ({
+                    ...prev,
+                    date: value,
+                  }));
+                  setEditOwnerError(null);
+                }}
+              />
+            )}
+
+            {editOwnerDialog.type === 'endDate' && (
+              <PersianDateInput
+                label="تاریخ پایان مالکیت"
+                value={editOwnerDialog.endDate}
+                onChange={(value) => {
+                  setEditOwnerDialog((prev) => ({
+                    ...prev,
+                    endDate: value,
+                  }));
+                  setEditOwnerError(null);
+                }}
+              />
+            )}
 
             {editOwnerError && (
               <p className="text-sm text-destructive">{editOwnerError}</p>
@@ -1893,6 +1631,7 @@ useEffect(() => {
                   owner: null,
                   phone: "",
                   date: "",
+                  endDate: "",
                 });
                 setEditOwnerError(null);
                 setEditOwnerSuccess(false);
@@ -1923,9 +1662,176 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
-      {/* ============================================
-          Add Person Dialog
-          ============================================ */}
+      {/* Edit Tenant Dialog */}
+      <Dialog
+        open={editTenantDialog.type !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditTenantDialog({
+              type: null,
+              tenant: null,
+              phone: "",
+              date: "",
+              count: "",
+              endDate: "",
+            });
+            setEditTenantError(null);
+            setEditTenantSuccess(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editTenantDialog.type === 'phone' && 'ویرایش شماره موبایل'}
+              {editTenantDialog.type === 'date' && 'ویرایش تاریخ شروع سکونت'}
+              {editTenantDialog.type === 'count' && 'ویرایش تعداد نفرات'}
+              {editTenantDialog.type === 'endDate' && 'ویرایش تاریخ پایان سکونت'}
+            </DialogTitle>
+            <DialogDescription>
+              {editTenantDialog.tenant?.nameuser || 'ساکن'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {editTenantDialog.type === 'phone' && (
+              <div className="space-y-2">
+                <Label htmlFor="editPhone">شماره موبایل</Label>
+                <Input
+                  id="editPhone"
+                  dir="ltr"
+                  type="tel"
+                  maxLength={11}
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                  value={editTenantDialog.phone}
+                  onChange={(e) => {
+                    setEditTenantDialog((prev) => ({
+                      ...prev,
+                      phone: e.target.value.replace(/\D/g, ""),
+                    }));
+                    setEditTenantError(null);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  شماره را با ۰ شروع کنید (۱۱ رقم)
+                </p>
+              </div>
+            )}
+
+            {editTenantDialog.type === 'date' && (
+              <PersianDateInput
+                label="تاریخ شروع سکونت"
+                value={editTenantDialog.date}
+                onChange={(value) => {
+                  setEditTenantDialog((prev) => ({
+                    ...prev,
+                    date: value,
+                  }));
+                  setEditTenantError(null);
+                }}
+              />
+            )}
+
+            {editTenantDialog.type === 'count' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="editCount">تعداد نفرات</Label>
+                  <Input
+                    id="editCount"
+                    dir="ltr"
+                    type="number"
+                    max={99}
+                    placeholder="مثال: ۲"
+                    value={editTenantDialog.count}
+                    onChange={(e) => {
+                      setEditTenantDialog((prev) => ({
+                        ...prev,
+                        count: e.target.value.replace(/\D/g, ""),
+                      }));
+                      setEditTenantError(null);
+                    }}
+                  />
+                </div>
+
+                <PersianDateInput
+                  label="تاریخ شروع با این تعداد نفرات"
+                  value={editTenantDialog.date}
+                  onChange={(value) => {
+                    setEditTenantDialog((prev) => ({
+                      ...prev,
+                      date: value,
+                    }));
+                    setEditTenantError(null);
+                  }}
+                />
+              </div>
+            )}
+
+            {editTenantDialog.type === 'endDate' && (
+              <PersianDateInput
+                label="تاریخ پایان سکونت"
+                value={editTenantDialog.endDate}
+                onChange={(value) => {
+                  setEditTenantDialog((prev) => ({
+                    ...prev,
+                    endDate: value,
+                  }));
+                  setEditTenantError(null);
+                }}
+              />
+            )}
+
+            {editTenantError && (
+              <p className="text-sm text-destructive">{editTenantError}</p>
+            )}
+
+            {editTenantSuccess && (
+              <p className="text-sm text-success">✓ ویرایش با موفقیت انجام شد.</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditTenantDialog({
+                  type: null,
+                  tenant: null,
+                  phone: "",
+                  date: "",
+                  count: "",
+                  endDate: "",
+                });
+                setEditTenantError(null);
+                setEditTenantSuccess(false);
+              }}
+              disabled={isEditingTenant}
+            >
+              انصراف
+            </Button>
+            <Button
+              onClick={() => void handleEditTenant()}
+              disabled={isEditingTenant || editTenantSuccess}
+            >
+              {isEditingTenant ? (
+                <>
+                  <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                  در حال ذخیره...
+                </>
+              ) : editTenantSuccess ? (
+                <>
+                  <CheckCircle className="ml-2 h-4 w-4" />
+                  انجام شد
+                </>
+              ) : (
+                "ذخیره"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Person Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1959,16 +1865,14 @@ useEffect(() => {
 
             <div className="space-y-2">
               <PersianDateInput
-  label="تاریخ شروع"
-  value={addDate}
-  onChange={(value) => {
-    setAddDate(value);
-    setAddError(null);
-  }}
-  error={deleteError ?? undefined}
-  required
-/>
-                   
+                label="تاریخ شروع"
+                value={addDate}
+                onChange={(value) => {
+                  setAddDate(value);
+                  setAddError(null);
+                }}
+                required
+              />
             </div>
 
             {addPersonType === 'saken' && (

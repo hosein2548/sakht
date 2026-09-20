@@ -138,12 +138,13 @@ export default function DashboardPage() {
   // Edit Profile State
   // ============================================
 
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editSuccess, setEditSuccess] = useState(false);
+  const [editFirstName, setEditFirstName] = useState("");
+const [editLastName, setEditLastName] = useState("");
+const [editPhone, setEditPhone] = useState("");
+const [isEditing, setIsEditing] = useState(false);
+const [editError, setEditError] = useState<string | null>(null);
+const [editSuccess, setEditSuccess] = useState(false);
+const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // ============================================
   // ✅ Mount Check
@@ -328,104 +329,139 @@ export default function DashboardPage() {
   // ============================================
 
   const openEditDialog = () => {
-    setEditName(user?.nameuser || "");
-    setEditPhone(user?.phone || "");
-    setEditError(null);
-    setEditSuccess(false);
-    setEditDialogOpen(true);
-  };
+  const fullName = user?.nameuser || "";
+  const parts = fullName.trim().split(/\s+/);
+
+  // اگه فقط یه کلمه بود → نام
+  // اگه دو کلمه یا بیشتر بود → کلمه اول نام، بقیه نام خانوادگی
+  const firstName = parts[0] || "";
+  const lastName = parts.slice(1).join(" ") || "";
+
+  setEditFirstName(firstName);
+  setEditLastName(lastName);
+  setEditPhone(user?.phone || "");
+  setEditError(null);
+  setEditSuccess(false);
+  setEditDialogOpen(true);
+};
 
   const closeEditDialog = () => {
-    if (isEditing) return;
-    setEditDialogOpen(false);
-    setEditError(null);
-    setEditSuccess(false);
-  };
+  if (isEditing) return;
+  setEditDialogOpen(false);
+  setEditError(null);
+  setEditSuccess(false);
+  setEditFirstName("");
+  setEditLastName("");
+};
 
   const handleEditProfile = async () => {
-    if (!user?.iduser) {
-      setEditError("اطلاعات کاربری یافت نشد.");
+  // ============================================
+  // اعتبارسنجی
+  // ============================================
+  if (!user?.iduser) {
+    setEditError("اطلاعات کاربری یافت نشد.");
+    return;
+  }
+
+  const trimmedFirstName = editFirstName.trim();
+  const trimmedLastName = editLastName.trim();
+
+  if (!trimmedFirstName) {
+    setEditError("نام خود را وارد کنید.");
+    return;
+  }
+
+  if (trimmedFirstName.length < 2) {
+    setEditError("نام باید حداقل ۲ کاراکتر باشد.");
+    return;
+  }
+
+  if (!trimmedLastName) {
+    setEditError("نام خانوادگی خود را وارد کنید.");
+    return;
+  }
+
+  if (trimmedLastName.length < 2) {
+    setEditError("نام خانوادگی باید حداقل ۲ کاراکتر باشد.");
+    return;
+  }
+
+  setIsEditing(true);
+  setEditError(null);
+  setEditSuccess(false);
+
+  try {
+    // ============================================
+    // ارسال به login.php
+    // ============================================
+    const response = await apiClient.post<string>("/login.php", {
+      idu: user.iduser,
+      name: trimmedFirstName,
+      family: trimmedLastName,
+      statephp: "savenameuser",  // ← اگه سرور اسم دیگه‌ای می‌خواد بگو
+    });
+
+    const raw = String(response.data ?? "");
+    console.log("Edit profile response:", raw);
+
+    if (!raw.startsWith("ok")) {
+      setEditError("ویرایش نام انجام نشد.");
+      setIsEditing(false);
       return;
     }
 
-    if (!editName.trim()) {
-      setEditError("نام خود را وارد کنید.");
-      return;
-    }
+    // ============================================
+    // به‌روزرسانی در Storeها
+    // ============================================
+    const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
 
-    if (editName.trim().length < 2) {
-      setEditError("نام باید حداقل ۲ کاراکتر باشد.");
-      return;
-    }
+    // AppStore
+    const updatedUser = {
+      ...user,
+      nameuser: fullName,
+    };
+    setUser(updatedUser);
 
-    setIsEditing(true);
-    setEditError(null);
-    setEditSuccess(false);
-
-    try {
-      // ارسال درخواست به سرور برای ویرایش نام
-      const response = await apiClient.post<string>("/profile.php", {
-        iduser: user.iduser,
-        nameuser: editName.trim(),
-        statephp: "editname",
+    // AuthStore
+    const authStore = useAuthStore.getState();
+    if (authStore.user) {
+      authStore.setUser({
+        ...authStore.user,
+        nameuser: fullName,
       });
-
-      const raw = String(response.data ?? "");
-      console.log("Edit profile response:", raw);
-
-      if (!raw.startsWith("ok")) {
-        setEditError("ویرایش نام انجام نشد.");
-        setIsEditing(false);
-        return;
-      }
-
-      // به‌روزرسانی در Storeهای محلی
-      const updatedUser = {
-        ...user,
-        nameuser: editName.trim(),
-      };
-
-      // به‌روزرسانی در AppStore
-      setUser(updatedUser);
-
-      // به‌روزرسانی در AuthStore
-      const authStore = useAuthStore.getState();
-      if (authStore.user) {
-        authStore.setUser({
-          ...authStore.user,
-          nameuser: editName.trim(),
-        });
-      }
-
-      // به‌روزرسانی در localStorage
-      authStorage.save(updatedUser);
-
-      // به‌روزرسانی در mainInfo (اگر وجود داشته باشد)
-      if (mainInfo) {
-        setMainInfo({
-          ...mainInfo,
-          nameuser: editName.trim(),
-        });
-      }
-
-      setEditSuccess(true);
-      
-      // بستن دیالوگ بعد از ۱ ثانیه
-      setTimeout(() => {
-        setEditDialogOpen(false);
-        setEditSuccess(false);
-        setIsEditing(false);
-      }, 1000);
-
-    } catch (error) {
-      console.error("Edit profile error:", error);
-      setEditError("ارتباط با سرور برقرار نشد.");
-    } finally {
-      if (!editSuccess) {
-        setIsEditing(false);
-      }
     }
-  };
+
+    // localStorage
+    authStorage.save(updatedUser);
+
+    // mainInfo
+    if (mainInfo) {
+      setMainInfo({
+        ...mainInfo,
+        nameuser: fullName,
+      });
+    }
+
+    setEditSuccess(true);
+
+    // بستن دیالوگ بعد از ۱ ثانیه
+    setTimeout(() => {
+      setEditDialogOpen(false);
+      setEditSuccess(false);
+      setIsEditing(false);
+      setEditFirstName("");
+      setEditLastName("");
+    }, 1000);
+
+  } catch (error) {
+    console.error("Edit profile error:", error);
+    setEditError("ارتباط با سرور برقرار نشد.");
+  } finally {
+    if (!editSuccess) {
+      setIsEditing(false);
+    }
+  }
+};
 
   // ============================================
   // ✅ Loading State
@@ -748,22 +784,42 @@ export default function DashboardPage() {
 
             {/* نام */}
             <div className="space-y-2">
-              <Label htmlFor="edit-name">نام و نام خانوادگی</Label>
-              <Input
-                id="edit-name"
-                placeholder="نام کامل خود را وارد کنید"
-                value={editName}
-                onChange={(e) => {
-                  setEditName(e.target.value);
-                  if (editError) setEditError(null);
-                }}
-                disabled={isEditing || editSuccess}
-                maxLength={50}
-              />
-              <p className="text-xs text-muted-foreground">
-                حداقل ۲ کاراکتر و حداکثر ۵۰ کاراکتر
-              </p>
-            </div>
+  <Label htmlFor="edit-firstname">
+    نام <span className="text-destructive">*</span>
+  </Label>
+  <Input
+    id="edit-firstname"
+    placeholder="نام خود را وارد کنید"
+    value={editFirstName}
+    onChange={(e) => {
+      setEditFirstName(e.target.value);
+      if (editError) setEditError(null);
+    }}
+    disabled={isEditing || editSuccess}
+    maxLength={25}
+  />
+</div>
+
+{/* نام خانوادگی */}
+<div className="space-y-2">
+  <Label htmlFor="edit-lastname">
+    نام خانوادگی <span className="text-destructive">*</span>
+  </Label>
+  <Input
+    id="edit-lastname"
+    placeholder="نام خانوادگی خود را وارد کنید"
+    value={editLastName}
+    onChange={(e) => {
+      setEditLastName(e.target.value);
+      if (editError) setEditError(null);
+    }}
+    disabled={isEditing || editSuccess}
+    maxLength={25}
+  />
+  <p className="text-xs text-muted-foreground">
+    هر فیلد حداقل ۲ کاراکتر
+  </p>
+</div>
 
             {/* شماره موبایل (فقط نمایش) */}
             <div className="space-y-2">
@@ -794,9 +850,14 @@ export default function DashboardPage() {
               انصراف
             </Button>
             <Button
-              onClick={() => void handleEditProfile()}
-              disabled={isEditing || editSuccess || !editName.trim()}
-            >
+  onClick={() => void handleEditProfile()}
+  disabled={
+    isEditing ||
+    editSuccess ||
+    !editFirstName.trim() ||
+    !editLastName.trim()
+  }
+>
               {isEditing ? (
                 <>
                   <span className="ml-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />

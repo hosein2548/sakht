@@ -8,21 +8,33 @@
 export interface ResidentHistory {
   /** شناسه واحد */
   idvahed: string;
-  
+
   /** شناسه رکورد (برای حذف/ویرایش) */
   idnaghsh: string;
-  
+
   /** تاریخ شروع سکونت */
   startDate: string;
-  
-  /** تاریخ پایان سکونت (خالی = تا کنون) */
+
+  /** تاریخ پایان سکونت (خالی یا 1490/01/01 = تا کنون) */
   endDate: string;
-  
+
   /** تعداد نفرات ساکن */
   count: string;
-  
-  /** وضعیت رکورد (برای نمایش دکمه حذف) */
+
+  /** وضعیت رکورد */
   status: 'active' | 'ended' | 'pending';
+
+  /** شناسه کاربر */
+  iduser: string;
+
+  /** نام و نام خانوادگی (از API) */
+  nameuser: string;
+
+  /** شماره موبایل (از API) */
+  phone: string;
+
+  /** نقش: مالک یا ساکن */
+  naghsh: 'مالک' | 'ساکن';
 }
 
 /**
@@ -30,6 +42,7 @@ export interface ResidentHistory {
  */
 export interface GetHistoryParams {
   unitId: string;
+  /** شناسه کاربر (اجباری - چون سرور بر اساس idu کوئری می‌زنه) */
   userId: string;
   /** نقش کاربر: مالک یا ساکن */
   role?: "malek" | "saken";
